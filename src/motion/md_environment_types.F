@@ -26,6 +26,8 @@ MODULE md_environment_types
                                               force_env_type
    USE free_energy_types,               ONLY: fe_env_release,&
                                               free_energy_type
+   USE girsanov_types,                  ONLY: girsanov_type,&
+                                              release_girsanov_type
    USE input_constants,                 ONLY: do_thermo_al,&
                                               langevin_ensemble
    USE input_section_types,             ONLY: section_vals_get_subs_vals,&
@@ -66,10 +68,11 @@ MODULE md_environment_types
       TYPE(thermostats_type), POINTER            :: thermostats => NULL()
       TYPE(barostat_type), POINTER               :: barostat => NULL()
       TYPE(reftraj_type), POINTER                :: reftraj => NULL()
-      TYPE(free_energy_type), POINTER           :: fe_env => NULL()
+      TYPE(free_energy_type), POINTER            :: fe_env => NULL()
       TYPE(simpar_type), POINTER                 :: simpar => NULL()
       TYPE(average_quantities_type), POINTER     :: averages => NULL()
       TYPE(thermal_regions_type), POINTER        :: thermal_regions => NULL()
+      TYPE(girsanov_type), POINTER               :: girsanov_env => NULL()
    END TYPE md_environment_type
 
    ! *** Public subroutines and data types ***
@@ -155,6 +158,10 @@ CONTAINS
          CALL release_thermal_regions(md_env%thermal_regions)
          DEALLOCATE (md_env%thermal_regions)
       END IF
+      IF (ASSOCIATED(md_env%girsanov_env)) THEN
+         CALL release_girsanov_type(md_env%girsanov_env)
+         DEALLOCATE (md_env%girsanov_env)
+      END IF
 
    END SUBROUTINE md_env_release
 
@@ -185,13 +192,14 @@ CONTAINS
 !> \param md_ener ...
 !> \param averages ...
 !> \param thermal_regions ...
+!> \param girsanov_env to collect integrator information needed for dynamical reweighting
 !> \param ehrenfest_md ...
 ! **************************************************************************************************
    SUBROUTINE get_md_env(md_env, itimes, constant, used_time, cell, simpar, npt, &
                          force_env, para_env, reftraj, t, init, first_time, fe_env, thermostats, barostat, &
                          thermostat_coeff, thermostat_part, thermostat_shell, thermostat_baro, &
                          thermostat_fast, thermostat_slow, md_ener, averages, &
-                         thermal_regions, ehrenfest_md)
+                         thermal_regions, girsanov_env, ehrenfest_md)
 
       TYPE(md_environment_type), INTENT(IN)              :: md_env
       INTEGER, OPTIONAL, POINTER                         :: itimes
@@ -213,6 +221,7 @@ CONTAINS
       TYPE(md_ener_type), OPTIONAL, POINTER              :: md_ener
       TYPE(average_quantities_type), OPTIONAL, POINTER   :: averages
       TYPE(thermal_regions_type), OPTIONAL, POINTER      :: thermal_regions
+      TYPE(girsanov_type), OPTIONAL, POINTER             :: girsanov_env
       LOGICAL, OPTIONAL                                  :: ehrenfest_md
 
       IF (PRESENT(itimes)) itimes => md_env%itimes
@@ -262,6 +271,7 @@ CONTAINS
       IF (PRESENT(first_time)) first_time = md_env%first_time
       IF (PRESENT(ehrenfest_md)) ehrenfest_md = md_env%ehrenfest_md
       IF (PRESENT(thermal_regions)) thermal_regions => md_env%thermal_regions
+      IF (PRESENT(girsanov_env)) girsanov_env => md_env%girsanov_env
 
    END SUBROUTINE get_md_env
 
@@ -283,11 +293,12 @@ CONTAINS
 !> \param md_ener ...
 !> \param averages ...
 !> \param thermal_regions ...
+!> \param girsanov_env to collect integrator information needed for dynamical reweighting
 !> \param ehrenfest_md ...
 ! **************************************************************************************************
    SUBROUTINE set_md_env(md_env, itimes, constant, cell, simpar, fe_env, force_env, &
                          para_env, init, first_time, thermostats, barostat, reftraj, md_ener, averages, &
-                         thermal_regions, ehrenfest_md)
+                         thermal_regions, girsanov_env, ehrenfest_md)
 
       TYPE(md_environment_type), INTENT(INOUT)           :: md_env
       INTEGER, OPTIONAL, POINTER                         :: itimes
@@ -304,6 +315,7 @@ CONTAINS
       TYPE(md_ener_type), OPTIONAL, POINTER              :: md_ener
       TYPE(average_quantities_type), OPTIONAL, POINTER   :: averages
       TYPE(thermal_regions_type), OPTIONAL, POINTER      :: thermal_regions
+      TYPE(girsanov_type), OPTIONAL, POINTER             :: girsanov_env
       LOGICAL, OPTIONAL                                  :: ehrenfest_md
 
       IF (PRESENT(init)) md_env%init = init
@@ -372,6 +384,15 @@ CONTAINS
             END IF
          END IF
          md_env%thermal_regions => thermal_regions
+      END IF
+      IF (PRESENT(girsanov_env)) THEN
+         IF (ASSOCIATED(md_env%girsanov_env)) THEN
+            IF (.NOT. ASSOCIATED(md_env%girsanov_env, girsanov_env)) THEN
+               CALL release_girsanov_type(md_env%girsanov_env)
+               DEALLOCATE (md_env%girsanov_env)
+            END IF
+         END IF
+         md_env%girsanov_env => girsanov_env
       END IF
 
    END SUBROUTINE set_md_env
