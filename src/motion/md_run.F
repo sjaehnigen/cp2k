@@ -36,6 +36,8 @@ MODULE md_run
    USE free_energy_methods,             ONLY: free_energy_evaluate
    USE free_energy_types,               ONLY: fe_env_create,&
                                               free_energy_type
+   USE girsanov_types,                  ONLY: girsanov_type, &
+                                              create_girsanov_environment
    USE global_types,                    ONLY: global_environment_type
    USE input_constants,                 ONLY: &
         ehrenfest, langevin_ensemble, npe_f_ensemble, npe_i_ensemble, &
@@ -203,6 +205,7 @@ CONTAINS
          free_energy_section, global_section, reftraj_section, subsys_section, work_section
       TYPE(simpar_type), POINTER                         :: simpar
       TYPE(thermal_regions_type), POINTER                :: thermal_regions
+      TYPE(girsanov_type), POINTER                       :: girsanov_env
       TYPE(thermostats_type), POINTER                    :: thermostats
       TYPE(virial_type), POINTER                         :: virial
 
@@ -214,7 +217,7 @@ CONTAINS
                md_ener, thermostats, barostat, reftraj, force_env_section, &
                reftraj_section, work_section, atomic_kinds, &
                local_particles, time, fe_env, free_energy_section, &
-               constraint_section, thermal_regions, virial, subsys_i)
+               girsanov_env, constraint_section, thermal_regions, virial, subsys_i)
       logger => cp_get_default_logger()
       para_env => force_env%para_env
 
@@ -297,8 +300,11 @@ CONTAINS
       ! Setup Free Energy Calculation (if required)
       CALL fe_env_create(fe_env, free_energy_section)
 
+      ! If requested setup Girsanov
+      call create_girsanov_environment(girsanov_env, md_section)
+
       CALL set_md_env(md_env=md_env, simpar=simpar, fe_env=fe_env, cell=cell, &
-                      force_env=force_env)
+                      force_env=force_env, girsanov_env=girsanov_env)
 
       ! Possibly initialize Wiener processes
       ![NB] Tested again within create_wiener_process.  Why??

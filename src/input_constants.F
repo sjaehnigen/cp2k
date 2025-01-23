@@ -114,6 +114,16 @@ MODULE input_constants
                                                do_thermo_gle = 103, &
                                                do_thermo_al = 104
 
+   ! Girsanov reweighting
+   INTEGER, PARAMETER, PUBLIC               :: grw_bias = 1, &
+                                               grw_perturbation = 2
+
+   INTEGER, PARAMETER, PUBLIC               :: grw_bias_use_metadynamics = 1, &
+                                               grw_bias_use_external = 2, &
+                                               grw_bias_use_mixing = 3
+
+   INTEGER, PARAMETER, PUBLIC               :: grw_perturbation_use_linres = 1
+
    ! MD initialisation method
    INTEGER, PARAMETER, PUBLIC               :: md_init_default = 1, &
                                                md_init_vib = 2

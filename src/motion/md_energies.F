@@ -36,6 +36,7 @@ MODULE md_energies
    USE force_env_types,                 ONLY: force_env_get,&
                                               force_env_type,&
                                               use_mixed_force
+   USE girsanov_utils,                  ONLY: write_reweighting_factor
    USE input_constants,                 ONLY: npe_f_ensemble,&
                                               npe_i_ensemble,&
                                               nph_uniaxial_damped_ensemble,&
@@ -465,6 +466,9 @@ CONTAINS
 
          ! Print Barostat status
          CALL print_barostat_status(barostat, simpar, my_pos, my_act, cell, itimes, time)
+
+         ! ! Print Girsanov Reweighting Factors
+         CALL write_reweighting_factor(1.0_dp)
 
          ! Print Stress Tensor
          CALL write_stress_tensor_to_file(virial, cell, motion_section, itimes, time*femtoseconds, my_pos, my_act)

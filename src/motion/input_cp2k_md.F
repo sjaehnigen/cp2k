@@ -28,6 +28,7 @@ MODULE input_cp2k_md
         npt_f_ensemble, npt_i_ensemble, npt_ia_ensemble, nve_ensemble, nvt_adiabatic_ensemble, &
         nvt_ensemble, reftraj_ensemble
    USE input_cp2k_barostats,            ONLY: create_barostat_section
+   USE input_cp2k_girsanov,             ONLY: create_girsanov_section
    USE input_cp2k_thermostats,          ONLY: create_region_section,&
                                               create_thermo_fast_section,&
                                               create_thermo_slow_section,&
@@ -273,6 +274,10 @@ CONTAINS
       CALL section_release(subsection)
 
       CALL create_thermostat_section(subsection)
+      CALL section_add_subsection(section, subsection)
+      CALL section_release(subsection)
+
+      CALL create_girsanov_section(subsection)
       CALL section_add_subsection(section, subsection)
       CALL section_release(subsection)
 
