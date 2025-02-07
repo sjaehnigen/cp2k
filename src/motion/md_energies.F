@@ -36,6 +36,7 @@ MODULE md_energies
    USE force_env_types,                 ONLY: force_env_get,&
                                               force_env_type,&
                                               use_mixed_force
+   USE girsanov_types,                  ONLY: girsanov_env_type
    USE girsanov_utils,                  ONLY: write_reweighting_factor
    USE input_constants,                 ONLY: npe_f_ensemble,&
                                               npe_i_ensemble,&
@@ -274,6 +275,7 @@ CONTAINS
       TYPE(cp_logger_type), POINTER                      :: logger
       TYPE(cp_subsys_type), POINTER                      :: subsys
       TYPE(force_env_type), POINTER                      :: force_env
+      TYPE(girsanov_env_type), POINTER                   :: girsanov_env      
       TYPE(md_ener_type), POINTER                        :: md_ener
       TYPE(mp_para_env_type), POINTER                    :: para_env
       TYPE(particle_list_type), POINTER                  :: core_particles, particles, &
@@ -301,7 +303,8 @@ CONTAINS
                thermostats, thermal_regions)
 
       CALL get_md_env(md_env=md_env, itimes=itimes, t=time, used_time=used_time, &
-                      simpar=simpar, force_env=force_env, init=init, md_ener=md_ener, &
+                      simpar=simpar, force_env=force_env, girsanov_env=girsanov_env, &
+                      init=init, md_ener=md_ener, &
                       reftraj=reftraj, thermostats=thermostats, barostat=barostat, &
                       para_env=para_env, averages=averages, thermal_regions=thermal_regions)
 
@@ -467,8 +470,8 @@ CONTAINS
          ! Print Barostat status
          CALL print_barostat_status(barostat, simpar, my_pos, my_act, cell, itimes, time)
 
-         ! ! Print Girsanov Reweighting Factors
-         CALL write_reweighting_factor(1.0_dp)
+         ! Print Girsanov Reweighting Factors
+         CALL write_reweighting_factor(girsanov_env)
 
          ! Print Stress Tensor
          CALL write_stress_tensor_to_file(virial, cell, motion_section, itimes, time*femtoseconds, my_pos, my_act)

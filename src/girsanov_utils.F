@@ -12,7 +12,7 @@
 !> \author Sascha Jähnigen - Freie Universität Berlin
 ! **************************************************************************************************
 MODULE girsanov_utils
-!   USE girsanov_types,                  ONLY: girsanov_type
+   USE girsanov_types,                  ONLY: girsanov_env_type
    USE cp_log_handling,                 ONLY: cp_get_default_logger,&
                                               cp_logger_type
    USE cp_output_handling,              ONLY: cp_print_key_finished_output,&
@@ -27,7 +27,7 @@ MODULE girsanov_utils
 !                                              femtoseconds,&
 !                                              kelvin
 !   USE simpar_types,                    ONLY: simpar_type
-#include "../base/base_uses.f90"
+#include "./base/base_uses.f90"
 
    IMPLICIT NONE
 
@@ -51,14 +51,14 @@ CONTAINS
 !>      12.2024 created [sjaehnigen]
 !> \author Sascha Jähnigen - Freie Universität Berlin
 ! **************************************************************************************************
-   SUBROUTINE write_reweighting_factor(time) ! barostat, simpar, my_pos, my_act, cell, itimes, time)
+   SUBROUTINE write_reweighting_factor(girsanov_env) ! barostat, simpar, my_pos, my_act, cell, itimes, time)
+      TYPE(girsanov_env_type), POINTER                   :: girsanov_env
 !      TYPE(barostat_type), POINTER                       :: barostat
 !      TYPE(simpar_type), INTENT(IN)                      :: simpar
 !      CHARACTER(LEN=default_string_length)               :: my_pos, my_act
 !      TYPE(cell_type), POINTER                           :: cell
 !      INTEGER, INTENT(IN)                                :: itimes
       ! REAL(KIND=dp), INTENT(IN)                          :: time
-      REAL(KIND=dp)                                      :: time, time2
 !
 !      INTEGER                                            :: baro, nfree
 !      LOGICAL                                            :: new_file
@@ -85,11 +85,11 @@ CONTAINS
 !         END IF
 !         CALL cp_print_key_finished_output(baro, logger, barostat%section, "PRINT%ENERGY")
 !      END IF
-      time2=time
-      CALL cp_warn(__LOCATION__, &
+      IF (ASSOCIATED(girsanov_env)) THEN
+          CALL cp_warn(__LOCATION__, &
                      ">>> I was told to write Girsanov output! "// &
                      "Congratulations!")
-      
+      END IF
 
    END SUBROUTINE write_reweighting_factor
 

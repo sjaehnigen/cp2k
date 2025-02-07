@@ -14,6 +14,7 @@ MODULE csvr_system_utils
 
    USE kinds,                           ONLY: dp
    USE parallel_rng_types,              ONLY: rng_stream_type
+   USE girsanov_types,                  ONLY: girsanov_env_type
 #include "./base/base_uses.f90"
 
    IMPLICIT NONE
@@ -77,14 +78,16 @@ CONTAINS
 !> \date 09.2007
 !> \author Giovanni Bussi - ETH Zurich, Lugano 10.2007
 ! **************************************************************************************************
-   FUNCTION rescaling_factor(kk, sigma, ndeg, taut, rng_stream) RESULT(my_res)
+   FUNCTION rescaling_factor(kk, sigma, ndeg, taut, rng_stream, girsanov_env) RESULT(my_res)
       REAL(KIND=dp), INTENT(IN)                          :: kk, sigma
       INTEGER, INTENT(IN)                                :: ndeg
       REAL(KIND=dp), INTENT(IN)                          :: taut
       TYPE(rng_stream_type), INTENT(INOUT)               :: rng_stream
+      TYPE(girsanov_env_type), POINTER, OPTIONAL         :: girsanov_env
       REAL(KIND=dp)                                      :: my_res
 
       REAL(KIND=dp)                                      :: factor, resample, reverse, rr
+      LOGICAL, SAVE                                      :: first_call = .True.
 
       my_res = 0.0_dp
       IF (kk > 0.0_dp) THEN
@@ -94,6 +97,14 @@ CONTAINS
             factor = 0.0_dp
          END IF
          rr = rng_stream%next()
+         IF (PRESENT(girsanov_env)) THEN
+            write (*,*) "girsanov", first_call
+            IF (ASSOCIATED(girsanov_env)) THEN
+               CPASSERT(ndeg == 1)
+               girsanov_env%n0 = rr
+               first_call = .not.(first_call)
+            END IF
+         END IF
          reverse = 1.0_dp
          ! reverse of momentum is implemented to have the correct limit to Langevin dynamics for ndeg=1
          ! condition: rr < -SQRT(ndeg*kk*factor/(sigma*(1.0_dp-factor)))

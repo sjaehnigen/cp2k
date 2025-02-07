@@ -21,6 +21,7 @@
 !>      Teodoro Laino [tlaino] 02.2008 - Splitting integrator module and keeping in
 !>                                       integrator only the INTEGRATORS
 !>      Lianheng Tong [LT]     12.2013 - Added regions to Langevin MD
+!>      Sascha Jähnigen (FU Berlin) 01.2025 - Add Girsanov reweighting support
 !> \author CJM
 ! **************************************************************************************************
 MODULE integrator
@@ -56,6 +57,7 @@ MODULE integrator
    USE force_env_methods,               ONLY: force_env_calc_energy_force
    USE force_env_types,                 ONLY: force_env_get,&
                                               force_env_type
+   USE girsanov_types,                  ONLY: girsanov_env_type  
    USE global_types,                    ONLY: global_environment_type
    USE input_constants,                 ONLY: ehrenfest,&
                                               npe_f_ensemble,&
@@ -824,7 +826,7 @@ CONTAINS
       IF (simpar%constraint) CALL getold(gci, local_molecules, molecule_set, &
                                          molecule_kind_set, particle_set, cell)
 
-      !    *** Velocity Verlet for Langeving *** v(t)--> v(t+1/2)
+      !    *** Velocity Verlet for Langevin *** v(t)--> v(t+1/2)
       IF (ASSOCIATED(force_env%meta_env)) THEN
          IF (force_env%meta_env%langevin) THEN
             DO ivar = 1, force_env%meta_env%n_colvar
@@ -940,6 +942,7 @@ CONTAINS
       TYPE(cp_subsys_type), POINTER                      :: subsys
       TYPE(distribution_1d_type), POINTER                :: local_molecules, local_particles
       TYPE(force_env_type), POINTER                      :: force_env
+      TYPE(girsanov_env_type), POINTER                   :: girsanov_env      
       TYPE(global_constraint_type), POINTER              :: gci
       TYPE(molecule_kind_list_type), POINTER             :: molecule_kinds
       TYPE(molecule_kind_type), DIMENSION(:), POINTER    :: molecule_kind_set
@@ -956,14 +959,14 @@ CONTAINS
       TYPE(tmp_variables_type), POINTER                  :: tmp
       TYPE(virial_type), POINTER                         :: virial
 
-      NULLIFY (gci, force_env, thermostat_coeff, tmp, &
+      NULLIFY (gci, force_env, thermostat_coeff, tmp, girsanov_env, &
                thermostat_part, thermostat_shell, cell, shell_particles, &
                shell_particle_set, core_particles, core_particle_set, rand)
       NULLIFY (para_env, subsys, local_molecules, local_particles, molecule_kinds, &
                molecules, molecule_kind_set, molecule_set, atomic_kinds, particles)
       NULLIFY (simpar, thermostat_coeff, thermostat_part, thermostat_shell, itimes)
 
-      CALL get_md_env(md_env=md_env, simpar=simpar, force_env=force_env, &
+      CALL get_md_env(md_env=md_env, simpar=simpar, force_env=force_env, girsanov_env=girsanov_env, &
                       thermostat_part=thermostat_part, thermostat_coeff=thermostat_coeff, &
                       thermostat_shell=thermostat_shell, para_env=para_env, &
                       itimes=itimes)
@@ -1012,10 +1015,14 @@ CONTAINS
 
       CALL allocate_tmp(md_env, tmp, nparticle, nshell, shell_adiabatic)
 
+      IF (ASSOCIATED(girsanov_env)) THEN
+          write (*,*) 'Girsanov1', girsanov_env%n0
+      END IF
+
       ! Apply Thermostat over the full set of particles
       IF (shell_adiabatic) THEN
          CALL apply_thermostat_particles(thermostat_part, force_env, molecule_kind_set, molecule_set, &
-                                        particle_set, local_molecules, local_particles, para_env, shell_adiabatic=shell_adiabatic, &
+                                       particle_set, local_molecules, local_particles, para_env, shell_adiabatic=shell_adiabatic, &
                                          shell_particle_set=shell_particle_set, core_particle_set=core_particle_set)
 
          CALL apply_thermostat_shells(thermostat_shell, atomic_kind_set, particle_set, &
@@ -1023,13 +1030,20 @@ CONTAINS
                                       core_particle_set=core_particle_set)
       ELSE
          CALL apply_thermostat_particles(thermostat_part, force_env, molecule_kind_set, molecule_set, &
-                                         particle_set, local_molecules, local_particles, para_env)
+                                         particle_set, local_molecules, local_particles, para_env, girsanov_env=girsanov_env)
+      END IF
+
+      IF (ASSOCIATED(girsanov_env)) THEN
+          write (*,*) 'Girsanov2', girsanov_env%n0
+          write (*,*) 'Girsanov2', girsanov_env%fx
+          write (*,*) 'Girsanov2', girsanov_env%fy
+          write (*,*) 'Girsanov2', girsanov_env%fz
       END IF
 
       IF (simpar%constraint) CALL getold(gci, local_molecules, molecule_set, &
                                          molecule_kind_set, particle_set, cell)
 
-      !    *** Velocity Verlet for Langeving *** v(t)--> v(t+1/2)
+      !    *** Velocity Verlet for Langevin *** v(t)--> v(t+1/2)
       IF (ASSOCIATED(force_env%meta_env)) THEN
          IF (force_env%meta_env%langevin) THEN
             DO ivar = 1, force_env%meta_env%n_colvar
@@ -1109,7 +1123,7 @@ CONTAINS
       CALL force_env_calc_energy_force(force_env, require_consistent_energy_force=.FALSE.)
 
       ! Metadynamics
-      CALL metadyn_integrator(force_env, itimes, tmp%vel, rand=rand)
+      CALL metadyn_integrator(force_env, itimes, tmp%vel, rand=rand, girsanov_env=girsanov_env)
 
       ! Velocity Verlet (second part)
       CALL vv_second(tmp, atomic_kind_set, local_particles, particle_set, &
@@ -1131,7 +1145,14 @@ CONTAINS
                                       core_vel=tmp%core_vel)
       ELSE
          CALL apply_thermostat_particles(thermostat_part, force_env, molecule_kind_set, molecule_set, &
-                                         particle_set, local_molecules, local_particles, para_env, vel=tmp%vel)
+                                         particle_set, local_molecules, local_particles, para_env, vel=tmp%vel, &
+                                         girsanov_env=girsanov_env)
+      END IF
+      IF (ASSOCIATED(girsanov_env)) THEN
+          write (*,*) 'Girsanov3', girsanov_env%n0
+          write (*,*) 'Girsanov3', girsanov_env%fx
+          write (*,*) 'Girsanov3', girsanov_env%fy
+          write (*,*) 'Girsanov3', girsanov_env%fz
       END IF
 
       ! Broadcast the new particle velocities and deallocate temporary

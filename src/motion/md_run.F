@@ -36,7 +36,7 @@ MODULE md_run
    USE free_energy_methods,             ONLY: free_energy_evaluate
    USE free_energy_types,               ONLY: fe_env_create,&
                                               free_energy_type
-   USE girsanov_types,                  ONLY: girsanov_type, &
+   USE girsanov_types,                  ONLY: girsanov_env_type, &
                                               create_girsanov_environment
    USE global_types,                    ONLY: global_environment_type
    USE input_constants,                 ONLY: &
@@ -197,6 +197,7 @@ CONTAINS
       TYPE(cp_subsys_type), POINTER                      :: subsys, subsys_i
       TYPE(distribution_1d_type), POINTER                :: local_particles
       TYPE(free_energy_type), POINTER                    :: fe_env
+      TYPE(girsanov_env_type), POINTER                   :: girsanov_env
       TYPE(md_ener_type), POINTER                        :: md_ener
       TYPE(mp_para_env_type), POINTER                    :: para_env
       TYPE(particle_list_type), POINTER                  :: particles
@@ -205,7 +206,6 @@ CONTAINS
          free_energy_section, global_section, reftraj_section, subsys_section, work_section
       TYPE(simpar_type), POINTER                         :: simpar
       TYPE(thermal_regions_type), POINTER                :: thermal_regions
-      TYPE(girsanov_type), POINTER                       :: girsanov_env
       TYPE(thermostats_type), POINTER                    :: thermostats
       TYPE(virial_type), POINTER                         :: virial
 

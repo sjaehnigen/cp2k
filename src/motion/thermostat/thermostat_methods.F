@@ -43,6 +43,7 @@ MODULE thermostat_methods
    USE extended_system_types,           ONLY: npt_info_type
    USE force_env_types,                 ONLY: force_env_get,&
                                               force_env_type
+   USE girsanov_types,                  ONLY: girsanov_env_type
    USE gle_system_dynamics,             ONLY: gle_particles,&
                                               initialize_gle_part
    USE global_types,                    ONLY: global_environment_type
@@ -566,6 +567,7 @@ CONTAINS
 !> \param vel ...
 !> \param shell_vel ...
 !> \param core_vel ...
+!> \param girsanov_env ...
 !> \par History
 !>      10.2007 created [tlaino]
 !> \author Teodoro Laino
@@ -573,7 +575,7 @@ CONTAINS
    SUBROUTINE apply_thermostat_particles(thermostat, force_env, molecule_kind_set, molecule_set, &
                                          particle_set, local_molecules, local_particles, &
                                          group, shell_adiabatic, shell_particle_set, &
-                                         core_particle_set, vel, shell_vel, core_vel)
+                                         core_particle_set, vel, shell_vel, core_vel, girsanov_env)
 
       TYPE(thermostat_type), POINTER                     :: thermostat
       TYPE(force_env_type), POINTER                      :: force_env
@@ -588,6 +590,7 @@ CONTAINS
                                                             core_particle_set(:)
       REAL(KIND=dp), INTENT(INOUT), OPTIONAL             :: vel(:, :), shell_vel(:, :), &
                                                             core_vel(:, :)
+      TYPE(girsanov_env_type), POINTER, INTENT(INOUT), OPTIONAL    :: girsanov_env
 
       IF (ASSOCIATED(thermostat)) THEN
          IF (thermostat%type_of_thermostat == do_thermo_nose) THEN
@@ -601,7 +604,7 @@ CONTAINS
             CPASSERT(ASSOCIATED(thermostat%csvr))
             CALL csvr_particles(thermostat%csvr, molecule_kind_set, molecule_set, &
                                 particle_set, local_molecules, group, shell_adiabatic, shell_particle_set, &
-                                core_particle_set, vel, shell_vel, core_vel)
+                                core_particle_set, vel, shell_vel, core_vel, girsanov_env=girsanov_env)
          ELSE IF (thermostat%type_of_thermostat == do_thermo_al) THEN
             ! Apply AD_LANGEVIN Thermostat
             CPASSERT(ASSOCIATED(thermostat%al))

@@ -16,6 +16,7 @@ MODULE csvr_system_dynamics
    USE distribution_1d_types,           ONLY: distribution_1d_type
    USE extended_system_types,           ONLY: map_info_type,&
                                               npt_info_type
+   USE girsanov_types,                  ONLY: girsanov_env_type                                          
    USE kinds,                           ONLY: dp
    USE message_passing,                 ONLY: mp_comm_type
    USE molecule_kind_types,             ONLY: molecule_kind_type
@@ -96,11 +97,13 @@ CONTAINS
 !> \param vel ...
 !> \param shell_vel ...
 !> \param core_vel ...
+!> \param girsanov_env ...
 !> \author 10.2007 [tlaino] - Teodoro Laino - University of Zurich
 ! **************************************************************************************************
    SUBROUTINE csvr_particles(csvr, molecule_kind_set, molecule_set, &
                              particle_set, local_molecules, group, shell_adiabatic, &
-                             shell_particle_set, core_particle_set, vel, shell_vel, core_vel)
+                             shell_particle_set, core_particle_set, vel, shell_vel, core_vel, &
+                             girsanov_env)
 
       TYPE(csvr_system_type), POINTER                    :: csvr
       TYPE(molecule_kind_type), POINTER                  :: molecule_kind_set(:)
@@ -113,6 +116,7 @@ CONTAINS
                                                             core_particle_set(:)
       REAL(KIND=dp), INTENT(INOUT), OPTIONAL             :: vel(:, :), shell_vel(:, :), &
                                                             core_vel(:, :)
+      TYPE(girsanov_env_type), POINTER, OPTIONAL         :: girsanov_env
 
       CHARACTER(len=*), PARAMETER                        :: routineN = 'csvr_particles'
 
@@ -130,7 +134,7 @@ CONTAINS
                                local_molecules, molecule_set, group, vel)
 
       ! Apply the Canonical Sampling through Velocity Rescaling
-      CALL do_csvr(csvr, map_info)
+      CALL do_csvr(csvr, map_info, girsanov_env=girsanov_env)
 
       ! Now scale the particle velocities
       CALL vel_rescale_particles(map_info, molecule_kind_set, molecule_set, particle_set, &
@@ -209,13 +213,14 @@ CONTAINS
 !> \param map_info ...
 !> \author 10.2007 [tlaino] - Teodoro Laino - University of Zurich
 ! **************************************************************************************************
-   SUBROUTINE do_csvr(csvr, map_info)
+   SUBROUTINE do_csvr(csvr, map_info, girsanov_env)
       TYPE(csvr_system_type), POINTER                    :: csvr
       TYPE(map_info_type), POINTER                       :: map_info
 
       INTEGER                                            :: i, imap, ndeg
       REAL(KIND=dp)                                      :: kin_energy, kin_target, taut
       TYPE(rng_stream_type), POINTER                     :: rng_stream
+      TYPE(girsanov_env_type), POINTER, OPTIONAL         :: girsanov_env
 
       DO i = 1, csvr%loc_num_csvr
          imap = map_info%map_index(i)
@@ -226,9 +231,15 @@ CONTAINS
          ndeg = csvr%nvt(i)%degrees_of_freedom
          taut = csvr%tau_csvr/csvr%dt_fact
          rng_stream => csvr%nvt(i)%gaussian_rng_stream
-         map_info%v_scale(imap) = rescaling_factor(kin_energy, kin_target, ndeg, taut, &
-                                                   rng_stream)
+         IF (i == 1 ) THEN
+            map_info%v_scale(imap) = rescaling_factor(kin_energy, kin_target, ndeg, taut, &
+                                                      rng_stream, girsanov_env=girsanov_env)
+         ELSE
+            map_info%v_scale(imap) = rescaling_factor(kin_energy, kin_target, ndeg, taut, &
+                                                      rng_stream)
+         END IF
       END DO
+      
 
    END SUBROUTINE do_csvr
 

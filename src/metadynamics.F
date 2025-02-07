@@ -34,6 +34,7 @@ MODULE metadynamics
                               cp_subsys_type
    USE force_env_types, ONLY: force_env_get, &
                               force_env_type
+   USE girsanov_types, ONLY: girsanov_env_type                          
    USE input_constants, ONLY: do_wall_m, &
                               do_wall_p, &
                               do_wall_reflective
@@ -223,13 +224,16 @@ CONTAINS
 !>      01.2009 created
 !> \author Teodoro Laino
 ! **************************************************************************************************
-   SUBROUTINE metadyn_integrator(force_env, itimes, vel, rand)
+   SUBROUTINE metadyn_integrator(force_env, itimes, vel, rand, girsanov_env)
       TYPE(force_env_type), POINTER            :: force_env
       INTEGER, INTENT(IN)                      :: itimes
       REAL(KIND=dp), DIMENSION(:, :), &
-         INTENT(INOUT), OPTIONAL                :: vel
+         INTENT(INOUT), OPTIONAL               :: vel
       REAL(KIND=dp), DIMENSION(:), OPTIONAL, &
-         POINTER                                :: rand
+         POINTER                               :: rand
+      TYPE(girsanov_env_type), POINTER, &
+         INTENT(INOUT), OPTIONAL               :: girsanov_env
+     
 
       CHARACTER(len=*), PARAMETER :: routineN = 'metadyn_integrator'
 
@@ -319,6 +323,14 @@ CONTAINS
                subsys%particles%els(i_part)%f(2) = subsys%particles%els(i_part)%f(2) + force_plumed_y(i_part)
                subsys%particles%els(i_part)%f(3) = subsys%particles%els(i_part)%f(3) + force_plumed_z(i_part)
             END DO
+            IF (PRESENT(girsanov_env)) THEN
+               IF (ASSOCIATED(girsanov_env)) THEN
+                  ! Later: save the full array
+                  girsanov_env%fx = force_plumed_x(1)
+                  girsanov_env%fy = force_plumed_y(1)
+                  girsanov_env%fz = force_plumed_z(1)
+               END IF
+            END IF
 
             DEALLOCATE (pos_plumed_x, pos_plumed_y, pos_plumed_z)
             DEALLOCATE (force_plumed_x, force_plumed_y, force_plumed_z)
@@ -339,16 +351,21 @@ CONTAINS
                IF (.NOT. PRESENT(rand)) THEN
                   CPABORT("Langevin on COLVAR not implemented for this MD ensemble!")
                END IF
+               IF (PRESENT(girsanov_env)) THEN
+                   IF (ASSOCIATED(girsanov_env)) THEN
+                      CPABORT("Langevin on COLVAR does not support Girsanov reweighting!")
+                   END IF
+               END IF
                !    *** Velocity Verlet for Langevin S(t)->S(t+1)
                CALL metadyn_position_colvar(force_env)
                !    *** Forces from Vs and  S(X(t+1))
                CALL metadyn_forces(force_env)
-               !    *** Velocity Verlet for Langeving *** v(t+1/2)--> v(t)
+               !    *** Velocity Verlet for Langevin *** v(t+1/2)--> v(t)
                CALL metadyn_velocities_colvar(force_env, rand)
             ELSE
-               CALL metadyn_forces(force_env, vel)
+               CALL metadyn_forces(force_env, vel, girsanov_env=girsanov_env)
             END IF
-            !    *** Write down COVAR informations
+            !    *** Write down COLVAR informations
             CALL metadyn_write_colvar(force_env)
          END IF
       END IF
@@ -365,10 +382,12 @@ CONTAINS
 !> \par History
 !>      04.2004 created
 ! **************************************************************************************************
-   SUBROUTINE metadyn_forces(force_env, vel)
+   SUBROUTINE metadyn_forces(force_env, vel, girsanov_env)
       TYPE(force_env_type), POINTER                      :: force_env
       REAL(KIND=dp), DIMENSION(:, :), INTENT(INOUT), &
          OPTIONAL                                        :: vel
+      TYPE(girsanov_env_type), POINTER, INTENT(INOUT), &
+         OPTIONAL                                        :: girsanov_env
 
       CHARACTER(len=*), PARAMETER                        :: routineN = 'metadyn_forces'
 
@@ -475,9 +494,21 @@ CONTAINS
                i = colvar_p(icolvar)%colvar%i_atom(ii)
                fft = cv%ff_hills + cv%ff_walls
                particles%els(i)%f = particles%els(i)%f + fft*colvar_p(icolvar)%colvar%dsdr(:, ii)
+               IF(PRESENT(girsanov_env)) THEN
+                  IF (ASSOCIATED(girsanov_env).AND.(i==1)) THEN
+                     girsanov_env%fx = fft*colvar_p(icolvar)%colvar%dsdr(1, ii)
+                     girsanov_env%fy = fft*colvar_p(icolvar)%colvar%dsdr(2, ii)
+                     girsanov_env%fz = fft*colvar_p(icolvar)%colvar%dsdr(3, ii)
+                  END IF
+              END IF
             END DO
          END DO
       ELSE
+         IF (PRESENT(girsanov_env)) THEN
+             IF (ASSOCIATED(girsanov_env)) THEN
+                 CPABORT("Extended Lagrangian COLVAR does not support Girsanov reweighting!")
+             END IF
+         END IF
          meta_env%ekin_s = 0.0_dp
          meta_env%epot_s = 0.0_dp
          meta_env%epot_walls = 0.0_dp
