@@ -26,8 +26,8 @@ MODULE md_environment_types
                                               force_env_type
    USE free_energy_types,               ONLY: fe_env_release,&
                                               free_energy_type
-   USE girsanov_types,                  ONLY: girsanov_type,&
-                                              release_girsanov_type
+   USE girsanov_types,                  ONLY: girsanov_env_type,&
+                                              release_girsanov_environment
    USE input_constants,                 ONLY: do_thermo_al,&
                                               langevin_ensemble
    USE input_section_types,             ONLY: section_vals_get_subs_vals,&
@@ -72,7 +72,7 @@ MODULE md_environment_types
       TYPE(simpar_type), POINTER                 :: simpar => NULL()
       TYPE(average_quantities_type), POINTER     :: averages => NULL()
       TYPE(thermal_regions_type), POINTER        :: thermal_regions => NULL()
-      TYPE(girsanov_type), POINTER               :: girsanov_env => NULL()
+      TYPE(girsanov_env_type), POINTER           :: girsanov_env => NULL()
    END TYPE md_environment_type
 
    ! *** Public subroutines and data types ***
@@ -140,6 +140,7 @@ CONTAINS
       NULLIFY (md_env%cell)
       NULLIFY (md_env%simpar)
       CALL release_barostat_type(md_env%barostat)
+      CALL release_girsanov_environment(md_env%girsanov_env)
       IF (ASSOCIATED(md_env%thermostats)) THEN
          CALL release_thermostats(md_env%thermostats)
          DEALLOCATE (md_env%thermostats)
@@ -157,10 +158,6 @@ CONTAINS
       IF (ASSOCIATED(md_env%thermal_regions)) THEN
          CALL release_thermal_regions(md_env%thermal_regions)
          DEALLOCATE (md_env%thermal_regions)
-      END IF
-      IF (ASSOCIATED(md_env%girsanov_env)) THEN
-         CALL release_girsanov_type(md_env%girsanov_env)
-         DEALLOCATE (md_env%girsanov_env)
       END IF
 
    END SUBROUTINE md_env_release
@@ -195,11 +192,11 @@ CONTAINS
 !> \param girsanov_env to collect integrator information needed for dynamical reweighting
 !> \param ehrenfest_md ...
 ! **************************************************************************************************
-   SUBROUTINE get_md_env(md_env, itimes, constant, used_time, cell, simpar, npt, &
-                         force_env, para_env, reftraj, t, init, first_time, fe_env, thermostats, barostat, &
+   SUBROUTINE get_md_env(md_env, itimes, constant, used_time, cell, simpar, npt, force_env, girsanov_env, &
+                         para_env, reftraj, t, init, first_time, fe_env, thermostats, barostat, &
                          thermostat_coeff, thermostat_part, thermostat_shell, thermostat_baro, &
                          thermostat_fast, thermostat_slow, md_ener, averages, &
-                         thermal_regions, girsanov_env, ehrenfest_md)
+                         thermal_regions, ehrenfest_md)
 
       TYPE(md_environment_type), INTENT(IN)              :: md_env
       INTEGER, OPTIONAL, POINTER                         :: itimes
@@ -208,6 +205,7 @@ CONTAINS
       TYPE(simpar_type), OPTIONAL, POINTER               :: simpar
       TYPE(npt_info_type), OPTIONAL, POINTER             :: npt(:, :)
       TYPE(force_env_type), OPTIONAL, POINTER            :: force_env
+      TYPE(girsanov_env_type), OPTIONAL, POINTER         :: girsanov_env      
       TYPE(mp_para_env_type), OPTIONAL, POINTER          :: para_env
       TYPE(reftraj_type), OPTIONAL, POINTER              :: reftraj
       REAL(KIND=dp), OPTIONAL, POINTER                   :: t
@@ -221,7 +219,6 @@ CONTAINS
       TYPE(md_ener_type), OPTIONAL, POINTER              :: md_ener
       TYPE(average_quantities_type), OPTIONAL, POINTER   :: averages
       TYPE(thermal_regions_type), OPTIONAL, POINTER      :: thermal_regions
-      TYPE(girsanov_type), OPTIONAL, POINTER             :: girsanov_env
       LOGICAL, OPTIONAL                                  :: ehrenfest_md
 
       IF (PRESENT(itimes)) itimes => md_env%itimes
@@ -296,9 +293,9 @@ CONTAINS
 !> \param girsanov_env to collect integrator information needed for dynamical reweighting
 !> \param ehrenfest_md ...
 ! **************************************************************************************************
-   SUBROUTINE set_md_env(md_env, itimes, constant, cell, simpar, fe_env, force_env, &
+   SUBROUTINE set_md_env(md_env, itimes, constant, cell, simpar, fe_env, force_env, girsanov_env, &
                          para_env, init, first_time, thermostats, barostat, reftraj, md_ener, averages, &
-                         thermal_regions, girsanov_env, ehrenfest_md)
+                         thermal_regions, ehrenfest_md)
 
       TYPE(md_environment_type), INTENT(INOUT)           :: md_env
       INTEGER, OPTIONAL, POINTER                         :: itimes
@@ -307,6 +304,7 @@ CONTAINS
       TYPE(simpar_type), OPTIONAL, POINTER               :: simpar
       TYPE(free_energy_type), OPTIONAL, POINTER          :: fe_env
       TYPE(force_env_type), OPTIONAL, POINTER            :: force_env
+      TYPE(girsanov_env_type), OPTIONAL, POINTER         :: girsanov_env
       TYPE(mp_para_env_type), OPTIONAL, POINTER          :: para_env
       LOGICAL, OPTIONAL                                  :: init, first_time
       TYPE(thermostats_type), OPTIONAL, POINTER          :: thermostats
@@ -315,7 +313,6 @@ CONTAINS
       TYPE(md_ener_type), OPTIONAL, POINTER              :: md_ener
       TYPE(average_quantities_type), OPTIONAL, POINTER   :: averages
       TYPE(thermal_regions_type), OPTIONAL, POINTER      :: thermal_regions
-      TYPE(girsanov_type), OPTIONAL, POINTER             :: girsanov_env
       LOGICAL, OPTIONAL                                  :: ehrenfest_md
 
       IF (PRESENT(init)) md_env%init = init
@@ -388,7 +385,7 @@ CONTAINS
       IF (PRESENT(girsanov_env)) THEN
          IF (ASSOCIATED(md_env%girsanov_env)) THEN
             IF (.NOT. ASSOCIATED(md_env%girsanov_env, girsanov_env)) THEN
-               CALL release_girsanov_type(md_env%girsanov_env)
+               CALL release_girsanov_environment(md_env%girsanov_env)
                DEALLOCATE (md_env%girsanov_env)
             END IF
          END IF
