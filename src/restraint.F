@@ -31,6 +31,10 @@ MODULE restraint
    USE force_env_types,                 ONLY: force_env_get,&
                                               force_env_set,&
                                               force_env_type
+   USE girsanov_types,                  ONLY: girsanov_env_type,&
+                                              update_girsanov_environment                           
+
+   USE input_constants,                 ONLY: grw_bias_restraint
    USE kinds,                           ONLY: dp
    USE molecule_kind_list_types,        ONLY: molecule_kind_list_type
    USE molecule_kind_types,             ONLY: colvar_constraint_type,&
@@ -61,11 +65,15 @@ CONTAINS
 ! **************************************************************************************************
 !> \brief Computes restraints
 !> \param force_env ...
+!> \param girsanov_env ...
 !> \author Teodoro Laino 08.2006 [tlaino]
 ! **************************************************************************************************
-   SUBROUTINE restraint_control(force_env)
+   SUBROUTINE restraint_control(force_env, girsanov_env)
 
       TYPE(force_env_type), POINTER                      :: force_env
+      TYPE(girsanov_env_type), INTENT(INOUT), POINTER, OPTIONAL &
+                                                         :: girsanov_env   
+      LOGICAL                                            :: do_girsanov = .FALSE.      
 
       CHARACTER(LEN=*), PARAMETER                        :: routineN = 'restraint_control'
 
@@ -75,7 +83,7 @@ CONTAINS
                                                             nmol_per_kind
       REAL(KIND=dp)                                      :: energy_3x3, energy_4x6, energy_colv, &
                                                             energy_fixd, extended_energies, k0, &
-                                                            rab(3), rab2, targ(3)
+                                                            update_energies, rab(3), rab2, targ(3)
       REAL(KIND=dp), ALLOCATABLE, DIMENSION(:, :)        :: force
       TYPE(cell_type), POINTER                           :: cell
       TYPE(colvar_counters)                              :: ncolv
@@ -95,6 +103,10 @@ CONTAINS
                molecules, molecule_kind, molecule_kind_set, molecule, molecule_set, particles, &
                particle_set, gci, lfixd_list)
       CALL timeset(routineN, handle)
+      IF(PRESENT(girsanov_env) .AND. ASSOCIATED(girsanov_env)) THEN
+         do_girsanov = (girsanov_env%mode == grw_bias_restraint)
+      END IF
+
       CALL force_env_get(force_env=force_env, subsys=subsys, cell=cell)
       energy_4x6 = 0.0_dp
       energy_3x3 = 0.0_dp
@@ -187,15 +199,20 @@ CONTAINS
          END DO
       END DO MOL
       CALL force_env%para_env%sum(n_restraint)
+
       IF (n_restraint > 0) THEN
          CALL force_env%para_env%sum(energy_fixd)
          CALL force_env%para_env%sum(energy_3x3)
          CALL force_env%para_env%sum(energy_4x6)
          CALL force_env%para_env%sum(energy_colv)
          CALL update_particle_set(particle_set, force_env%para_env, for=force, add=.TRUE.)
+         IF(do_girsanov) THEN
+            CALL update_girsanov_environment(girsanov_env, grad_U=-force)
+         END IF
          force = 0.0_dp
          n_restraint = 0
       END IF
+      
       ! Intermolecular Restraints
       IF (ASSOCIATED(gci)) THEN
          IF (gci%nrestraint > 0) THEN
@@ -217,17 +234,22 @@ CONTAINS
             DO iparticle = 1, SIZE(particle_set)
                particle_set(iparticle)%f = particle_set(iparticle)%f + force(:, iparticle)
             END DO
+            IF(do_girsanov) THEN
+               CALL update_girsanov_environment(girsanov_env, grad_U=-force)
+            END IF            
          END IF
       END IF
       DEALLOCATE (force)
 
       ! Store restraint energies
       CALL force_env_get(force_env=force_env, additional_potential=extended_energies)
-      extended_energies = extended_energies + energy_3x3 + &
-                          energy_fixd + &
-                          energy_4x6 + &
-                          energy_colv
+      update_energies = energy_3x3 + energy_fixd + energy_4x6 + energy_colv
+      extended_energies = extended_energies + update_energies
       CALL force_env_set(force_env=force_env, additional_potential=extended_energies)
+
+      IF(do_girsanov) THEN
+         CALL update_girsanov_environment(girsanov_env, U=update_energies)
+      END IF          
       CALL timestop(handle)
 
    END SUBROUTINE restraint_control

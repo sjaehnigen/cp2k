@@ -25,6 +25,7 @@ MODULE thermostat_mapping
                                               do_region_molecule,&
                                               do_thermo_communication,&
                                               do_thermo_no_communication
+   USE girsanov_types,                  ONLY: girsanov_env_type
    USE kinds,                           ONLY: dp
    USE memory_utilities,                ONLY: reallocate
    USE message_passing,                 ONLY: mp_para_env_type
@@ -528,7 +529,8 @@ CONTAINS
 ! **************************************************************************************************
    SUBROUTINE thermostat_mapping_region(map_info, deg_of_freedom, massive_atom_list, &
                                         molecule_kind_set, local_molecules, molecule_set, para_env, natoms_local, simpar, &
-                                        number, region, gci, shell, map_loc_thermo_gen, sum_of_thermostats)
+                                        number, region, gci, shell, map_loc_thermo_gen, sum_of_thermostats, &
+                                        girsanov_env)
 
       TYPE(map_info_type), POINTER                       :: map_info
       INTEGER, DIMENSION(:), POINTER                     :: deg_of_freedom, massive_atom_list
@@ -543,6 +545,7 @@ CONTAINS
       LOGICAL, INTENT(IN)                                :: shell
       INTEGER, DIMENSION(:), POINTER                     :: map_loc_thermo_gen
       INTEGER, INTENT(IN)                                :: sum_of_thermostats
+      TYPE(girsanov_env_type), POINTER, OPTIONAL         :: girsanov_env
 
       CHARACTER(LEN=*), PARAMETER :: routineN = 'thermostat_mapping_region'
 
@@ -578,6 +581,9 @@ CONTAINS
       ALLOCATE (map_info%index(number))
       ALLOCATE (map_info%map_index(number))
       ALLOCATE (deg_of_freedom(number))
+      IF (PRESENT(girsanov_env) .AND. ASSOCIATED(girsanov_env)) THEN
+         ALLOCATE(girsanov_env%thermo_map(number))
+      END IF
 
       CALL massive_list_generate(molecule_set, molecule_kind_set, &
                                  local_molecules, para_env, massive_atom_list, region, shell)
@@ -585,7 +591,7 @@ CONTAINS
       CALL thermostat_mapping_region_low(region, map_info, nkind, point, &
                                          deg_of_freedom, local_molecules, const_mol, massive_atom_list, &
                                          tot_const, molecule_set, number_of_thermostats, shell, gci, &
-                                         map_loc_thermo_gen)
+                                         map_loc_thermo_gen, girsanov_env)
 
       check = (number == number_of_thermostats)
       CPASSERT(check)
@@ -617,7 +623,7 @@ CONTAINS
 ! **************************************************************************************************
    SUBROUTINE thermostat_mapping_region_low(region, map_info, nkind, point, &
                                             deg_of_freedom, local_molecules, const_mol, massive_atom_list, tot_const, &
-                                            molecule_set, number, shell, gci, map_loc_thermo_gen)
+                                            molecule_set, number, shell, gci, map_loc_thermo_gen, girsanov_env)
 
       INTEGER, INTENT(IN)                                :: region
       TYPE(map_info_type), POINTER                       :: map_info
@@ -631,6 +637,7 @@ CONTAINS
       LOGICAL, INTENT(IN)                                :: shell
       TYPE(global_constraint_type), POINTER              :: gci
       INTEGER, DIMENSION(:), POINTER                     :: map_loc_thermo_gen
+      TYPE(girsanov_env_type), POINTER, OPTIONAL         :: girsanov_env
 
       CHARACTER(LEN=*), PARAMETER :: routineN = 'thermostat_mapping_region_low'
 
@@ -638,6 +645,7 @@ CONTAINS
          imol_local, ipart, itmp, jj, k, kk, last_atom, last_shell, nglob_cns, nmol_local
       INTEGER, ALLOCATABLE, DIMENSION(:)                 :: tmp, wrk
       LOGICAL                                            :: check, global_constraints
+      LOGICAL                                            :: do_girsanov = .FALSE.
       TYPE(molecule_type), POINTER                       :: molecule
 
       CALL timeset(routineN, handle)
@@ -648,6 +656,14 @@ CONTAINS
       number = 0
       nglob_cns = 0
       IF (global_constraints) nglob_cns = gci%ntot - gci%nrestraint
+
+      IF (PRESENT(girsanov_env) .AND. ASSOCIATED(girsanov_env)) THEN
+         do_girsanov = .TRUE.
+         ! ToDo: Implement massive region
+         ! CPASSERT((region == do_region_massive) .OR. (region == do_region_defined))
+         CPASSERT(region == do_region_massive)
+      END IF
+
       IF (region == do_region_global) THEN
          ! Global Region
          check = (map_info%dis_type == do_thermo_communication)
@@ -771,6 +787,9 @@ CONTAINS
                      map_info%map_index(number) = number
                      map_info%p_kin(jj, ii)%point => map_info%s_kin(number)
                      map_info%p_scale(jj, ii)%point => map_info%v_scale(number)
+                     IF (do_girsanov) THEN
+                        girsanov_env%thermo_map(number) = girsanov_env%index_map(jj, ii)
+                     END IF
                   END DO
                END DO
                IF (first_atom + k - 1 /= last_atom) THEN
@@ -781,7 +800,7 @@ CONTAINS
       ELSE
          CPABORT("Invalid region!")
       END IF
-
+      
       CALL timestop(handle)
 
    END SUBROUTINE thermostat_mapping_region_low

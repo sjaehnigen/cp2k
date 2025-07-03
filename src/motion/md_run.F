@@ -37,7 +37,9 @@ MODULE md_run
    USE free_energy_types,               ONLY: fe_env_create,&
                                               free_energy_type
    USE girsanov_types,                  ONLY: girsanov_env_type, &
-                                              create_girsanov_environment
+                                              create_girsanov_environment, &
+                                              initialize_girsanov_environment, &
+                                              roll_girsanov_environment
    USE global_types,                    ONLY: global_environment_type
    USE input_constants,                 ONLY: &
         ehrenfest, langevin_ensemble, npe_f_ensemble, npe_i_ensemble, &
@@ -250,9 +252,14 @@ CONTAINS
       CALL set_md_env(md_env, md_ener=md_ener)
       NULLIFY (md_ener)
 
+      CALL force_env_get(force_env, subsys=subsys)
+
+      ! If requested setup Girsanov
+      call create_girsanov_environment(girsanov_env, md_section, simpar, subsys)
+      
       ! If requested setup Thermostats
       CALL create_thermostats(thermostats, md_section, force_env, simpar, para_env, &
-                              globenv, global_section)
+                              globenv, global_section, girsanov_env=girsanov_env)
 
       ! If requested setup Barostat
       CALL create_barostat_type(barostat, md_section, force_env, simpar, globenv)
@@ -282,8 +289,8 @@ CONTAINS
          CALL set_md_env(md_env, reftraj=reftraj)
       END IF
 
-      CALL force_env_get(force_env, subsys=subsys, cell=cell, &
-                         force_env_section=force_env_section)
+      CALL force_env_get(force_env, cell=cell, &
+                         force_env_section=force_env_section)      
       CALL cp_subsys_get(subsys, virial=virial)
 
       ! Set V0 if needed
@@ -300,8 +307,8 @@ CONTAINS
       ! Setup Free Energy Calculation (if required)
       CALL fe_env_create(fe_env, free_energy_section)
 
-      ! If requested setup Girsanov
-      call create_girsanov_environment(girsanov_env, md_section)
+      ! If requested, initialize Girsanov with the collected data
+      call initialize_girsanov_environment(girsanov_env)
 
       CALL set_md_env(md_env=md_env, simpar=simpar, fe_env=fe_env, cell=cell, &
                       force_env=force_env, girsanov_env=girsanov_env)
@@ -374,7 +381,7 @@ CONTAINS
             ![NB] Lets let all methods, even ones without consistent energies, succeed here.
             !     They'll fail in actual integrator if needed
             ! consistent_energies=.FALSE. by default
-            CALL force_env_calc_energy_force(force_env, calc_force=.TRUE.)
+            CALL force_env_calc_energy_force(force_env, calc_force=.TRUE., girsanov_env=girsanov_env)
          END IF
 
          IF (ASSOCIATED(force_env%qs_env)) THEN
@@ -382,6 +389,7 @@ CONTAINS
 !deb        force_env%qs_env%sim_time = time
 !deb        force_env%qs_env%sim_step = itimes
          END IF
+         
          ! Warm-up engines for metadynamics
          IF (ASSOCIATED(force_env%meta_env)) THEN
             ! Setup stuff for plumed if needed
@@ -398,15 +406,15 @@ CONTAINS
                      IF (force_env%meta_env%delta_t > EPSILON(1._dp)) THEN
                         check = ABS(force_env%meta_env%delta_t - dummy) < 1.E+3_dp*EPSILON(1._dp)
                         IF (.NOT. check) &
-                           CALL cp_abort(__LOCATION__, &
-                                         "Inconsistency between DELTA_T and WTGAMMA (both specified):"// &
+                        CALL cp_abort(__LOCATION__, &
+                        "Inconsistency between DELTA_T and WTGAMMA (both specified):"// &
                                          " please, verify that DELTA_T=(WTGAMMA-1)*TEMPERATURE")
-                     ELSE
+                                       ELSE
                         force_env%meta_env%delta_t = dummy
                      END IF
                   ELSE
                      force_env%meta_env%wtgamma = 1._dp &
-                                                  + force_env%meta_env%delta_t/force_env%meta_env%wttemperature
+                     + force_env%meta_env%delta_t/force_env%meta_env%wttemperature
                   END IF
                   force_env%meta_env%invdt = 1._dp/force_env%meta_env%delta_t
                END IF
@@ -414,7 +422,6 @@ CONTAINS
                CALL metadyn_write_colvar(force_env)
             END IF
          END IF
-
          IF (simpar%do_respa) THEN
             CALL force_env_calc_energy_force(force_env%sub_force_env(1)%force_env, &
                                              calc_force=.TRUE.)
@@ -431,6 +438,10 @@ CONTAINS
          CALL md_energy(md_env, md_ener)
          CALL md_write_output(md_env) !inits the print env at itimes == 0 also writes trajectories
          md_stride = 1
+         ! roll and reinitialize O-step data in girsanov environment
+         IF (ASSOCIATED(girsanov_env)) THEN
+            CALL roll_girsanov_environment(girsanov_env)
+         END IF
       ELSE
          CALL get_md_env(md_env, reftraj=reftraj)
          CALL initialize_reftraj(reftraj, reftraj_section, md_env)
@@ -483,6 +494,8 @@ CONTAINS
                                                            "LAGRANGE_MULTIPLIERS"), cp_p_file)
 
          ! Velocity Verlet Integrator
+         write (*,*) "-------- GIRSANOV step --------", istep
+         
          CALL velocity_verlet(md_env, globenv)
 
          ! Close Shake output if requested...
@@ -544,9 +557,14 @@ CONTAINS
          IF (simpar%ensemble == reftraj_ensemble) THEN
             CALL write_output_reftraj(md_env)
          END IF
+
+         ! roll and reinitialize O-step data in girsanov environment
+         IF (ASSOCIATED(girsanov_env)) THEN
+            CALL roll_girsanov_environment(girsanov_env)
+         END IF
       END DO
 
-! if we need the final kinetic energy for Hybrid Monte Carlo
+      ! if we need the final kinetic energy for Hybrid Monte Carlo
       IF (PRESENT(hmc_e_final)) hmc_e_final = md_ener%ekin
 
       ! Remove the iteration level

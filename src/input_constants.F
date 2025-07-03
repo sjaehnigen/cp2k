@@ -118,11 +118,11 @@ MODULE input_constants
    INTEGER, PARAMETER, PUBLIC               :: grw_bias = 1, &
                                                grw_perturbation = 2
 
-   INTEGER, PARAMETER, PUBLIC               :: grw_bias_use_metadynamics = 1, &
-                                               grw_bias_use_external = 2, &
-                                               grw_bias_use_mixing = 3
-
-   INTEGER, PARAMETER, PUBLIC               :: grw_perturbation_use_linres = 1
+   INTEGER, PARAMETER, PUBLIC               :: grw_bias_metadynamics = 1, &
+                                               grw_bias_external = 2, &
+                                               grw_bias_restraint = 3, &
+                                               grw_bias_mixing = 4, &
+                                               grw_perturbation_linres = 5
 
    ! MD initialisation method
    INTEGER, PARAMETER, PUBLIC               :: md_init_default = 1, &

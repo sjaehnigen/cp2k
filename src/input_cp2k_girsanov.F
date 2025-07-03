@@ -18,10 +18,11 @@ MODULE input_cp2k_girsanov
 
    USE input_constants,                 ONLY: grw_bias,&
                                               grw_perturbation,&
-                                              grw_bias_use_metadynamics,&
-                                              grw_bias_use_external,&
-                                              grw_bias_use_mixing,&
-                                              grw_perturbation_use_linres
+                                              grw_bias_metadynamics,&
+                                              grw_bias_external,&
+                                              grw_bias_restraint,&
+                                              grw_bias_mixing,&
+                                              grw_perturbation_linres
    USE cp_output_handling,              ONLY: cp_print_key_section_create,&
                                               high_print_level
    USE cp_units,                        ONLY: cp_unit_to_cp2k
@@ -33,6 +34,7 @@ MODULE input_cp2k_girsanov
                                               section_create,&
                                               section_release,&
                                               section_type
+   USE input_val_types,                 ONLY: integer_t
    USE string_utilities,                ONLY: newline, s2a
 #include "./base/base_uses.f90"
 
@@ -109,13 +111,27 @@ CONTAINS
 
       CALL keyword_create(keyword, __LOCATION__, name="SOURCE", &
                           description="Specify the source from which to extract the bias potential", &
-                          usage="SOURCE (METADYNAMICS | EXTERNAL_POTENTIAL | MIXING)", &
-                          enum_c_vals=s2a("METADYNAMICS", "EXTERNAL_POTENTIAL", "MIXING"), &
-                          enum_i_vals=(/grw_bias_use_metadynamics, grw_bias_use_external, grw_bias_use_mixing/), &
+                          usage="SOURCE (METADYNAMICS | EXTERNAL_POTENTIAL | RESTRAINT | MIXING)", &
+                          enum_c_vals=s2a("METADYNAMICS", "EXTERNAL_POTENTIAL", "RESTRAINT", "MIXING"), &
+                          enum_i_vals=(/grw_bias_metadynamics, grw_bias_external, grw_bias_restraint, &
+                                       grw_bias_mixing/), &
                           enum_desc=s2a("Use hills from metadynamics. Requires the METADYN section etc.", &
-                                        "Use external potential. Requires the EXTERNAL_POTENTIAL section.", &
+                                        "Use external potential. Requires a EXTERNAL_POTENTIAL section.", &
+                                        "Use force from restraint. Requires a CONSTRAINT section with "// & 
+                                        "active RESTRAINTS.", &
                                         "Use potential from force mixing. Requires the MIXED section etc."), &
-                          default_i_val=grw_bias_use_metadynamics)
+                          default_i_val=grw_bias_metadynamics)
+      CALL section_add_keyword(section, keyword)
+      CALL keyword_release(keyword)
+
+      CALL keyword_create(keyword, __LOCATION__, name="ATOM_LIST", &
+                          usage="ATOM_LIST {integer} {integer} ... {integer}", &
+                          description="Defines the list of atoms for which the reweighting factor is calculated. "// &
+                                      "(-1 for automatic guess (if possible, NOT IMPLEMENTED); 0 for all atoms)", &
+                          repeats=.TRUE., &
+                          n_var=-1, &
+                          type_of_var=integer_t, &
+                          default_i_val=-1)
       CALL section_add_keyword(section, keyword)
       CALL keyword_release(keyword)
 
@@ -142,12 +158,22 @@ CONTAINS
                           description="Specify the source of the perturbation potential", &
                           usage="SOURCE (LINRES)", &
                           enum_c_vals=s2a("LINRES"), &
-                          enum_i_vals=(/grw_perturbation_use_linres/), &
+                          enum_i_vals=(/grw_perturbation_linres/), &
                           enum_desc=s2a("Use results from a linear response calculation. Requires the LINRES section."), &
-                          default_i_val=grw_perturbation_use_linres)
+                          default_i_val=grw_perturbation_linres)
       CALL section_add_keyword(section, keyword)
       CALL keyword_release(keyword)
 
+      CALL keyword_create(keyword, __LOCATION__, name="ATOM_LIST", &
+                          usage="ATOM_LIST {integer} {integer} ... {integer}", &
+                          description="Defines the list of atoms for which the reweighting factor is calculated. "// &
+                                      "(uses all atoms if no atom list or the value -1 is specified)", &
+                          repeats=.TRUE., &
+                          n_var=-1, &
+                          type_of_var=integer_t)
+      CALL section_add_keyword(section, keyword)
+      CALL keyword_release(keyword)
+      
    END SUBROUTINE create_perturbation_section
 
 ! **************************************************************************************************
@@ -167,8 +193,7 @@ CONTAINS
                           n_keywords=1, n_subsections=0, repeats=.FALSE.)
 
       CALL cp_print_key_section_create(print_key, __LOCATION__, "REWEIGHTING_FACTORS", &
-                                       description="Controls the output of the static and dynamic reweighting factors "// &
-                                       "for all biased degrees of freedom.", &
+                                       description="Controls the output of the static and dynamic reweighting factors.", &
                                        print_level=high_print_level, common_iter_levels=1, &
                                        filename="")
       ! Switch bewteen RNG and RW factors through format keyword? (example taken from velocities)

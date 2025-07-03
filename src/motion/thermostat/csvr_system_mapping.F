@@ -15,6 +15,7 @@ MODULE csvr_system_mapping
    USE distribution_1d_types,           ONLY: distribution_1d_type
    USE extended_system_types,           ONLY: debug_isotropic_limit,&
                                               map_info_type
+   USE girsanov_types,                  ONLY: girsanov_env_type
    USE input_constants,                 ONLY: &
         do_thermo_communication, do_thermo_no_communication, do_thermo_only_master, &
         isokin_ensemble, langevin_ensemble, npe_f_ensemble, npe_i_ensemble, &
@@ -103,7 +104,8 @@ CONTAINS
 !> \author Teodoro Laino [tlaino] 10.2007- University of Zurich
 ! **************************************************************************************************
    SUBROUTINE csvr_to_particle_mapping(thermostat_info, simpar, local_molecules, &
-                                       molecule_set, molecule_kind_set, csvr, para_env, gci)
+                                       molecule_set, molecule_kind_set, csvr, para_env, gci, &
+                                       girsanov_env)
 
       TYPE(thermostat_info_type), POINTER                :: thermostat_info
       TYPE(simpar_type), POINTER                         :: simpar
@@ -113,6 +115,7 @@ CONTAINS
       TYPE(csvr_system_type), POINTER                    :: csvr
       TYPE(mp_para_env_type), POINTER                    :: para_env
       TYPE(global_constraint_type), POINTER              :: gci
+      TYPE(girsanov_env_type), POINTER, OPTIONAL         :: girsanov_env
 
       INTEGER                                            :: i, imap, j, natoms_local, &
                                                             sum_of_thermostats
@@ -131,7 +134,8 @@ CONTAINS
 
          CALL setup_csvr_thermostat(csvr, thermostat_info, deg_of_freedom, &
                                     massive_atom_list, molecule_kind_set, local_molecules, molecule_set, &
-                                    para_env, natoms_local, simpar, sum_of_thermostats, gci)
+                                    para_env, natoms_local, simpar, sum_of_thermostats, gci, &
+                                    girsanov_env=girsanov_env)
 
          ! Sum up the number of degrees of freedom on each thermostat.
          ! first: initialize the target
@@ -189,7 +193,8 @@ CONTAINS
 ! **************************************************************************************************
    SUBROUTINE setup_csvr_thermostat(csvr, thermostat_info, deg_of_freedom, &
                                     massive_atom_list, molecule_kind_set, local_molecules, molecule_set, &
-                                    para_env, natoms_local, simpar, sum_of_thermostats, gci, shell)
+                                    para_env, natoms_local, simpar, sum_of_thermostats, gci, shell, &
+                                    girsanov_env)
 
       TYPE(csvr_system_type), POINTER                    :: csvr
       TYPE(thermostat_info_type), POINTER                :: thermostat_info
@@ -207,6 +212,7 @@ CONTAINS
       INTEGER                                            :: nkind, number, region
       LOGICAL                                            :: do_shell
       TYPE(map_info_type), POINTER                       :: map_info
+      TYPE(girsanov_env_type), POINTER, OPTIONAL         :: girsanov_env
 
       do_shell = .FALSE.
       IF (PRESENT(shell)) do_shell = shell
@@ -218,10 +224,19 @@ CONTAINS
       number = thermostat_info%number_of_thermostats
       region = csvr%region
 
+
+
       CALL thermostat_mapping_region(map_info, deg_of_freedom, massive_atom_list, &
                                      molecule_kind_set, local_molecules, molecule_set, para_env, natoms_local, &
                                      simpar, number, region, gci, do_shell, thermostat_info%map_loc_thermo_gen, &
-                                     sum_of_thermostats)
+                                     sum_of_thermostats, girsanov_env)
+
+      IF (PRESENT(girsanov_env) .AND. ASSOCIATED(girsanov_env)) THEN 
+         ! --- if velocity-Verlet integration is used, dt_fact must be one
+         CPASSERT(csvr%dt_fact == 1.0_dp)
+         ! --- NB: tau_csvr = 2 * tau_input / dt .AND. xi = 1 / (2 * tau_input)
+         girsanov_env%xi = 1.0_dp / csvr%tau_csvr / simpar%dt
+      END IF
 
       ! This is the local number of available thermostats
       csvr%loc_num_csvr = number

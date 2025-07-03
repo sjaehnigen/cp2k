@@ -16,7 +16,7 @@ MODULE csvr_system_dynamics
    USE distribution_1d_types,           ONLY: distribution_1d_type
    USE extended_system_types,           ONLY: map_info_type,&
                                               npt_info_type
-   USE girsanov_types,                  ONLY: girsanov_env_type                                          
+   USE girsanov_types,                  ONLY: girsanov_env_type
    USE kinds,                           ONLY: dp
    USE message_passing,                 ONLY: mp_comm_type
    USE molecule_kind_types,             ONLY: molecule_kind_type
@@ -217,11 +217,25 @@ CONTAINS
       TYPE(csvr_system_type), POINTER                    :: csvr
       TYPE(map_info_type), POINTER                       :: map_info
 
-      INTEGER                                            :: i, imap, ndeg
+      INTEGER                                            :: i, imap, jmap, ndeg
       REAL(KIND=dp)                                      :: kin_energy, kin_target, taut
       TYPE(rng_stream_type), POINTER                     :: rng_stream
       TYPE(girsanov_env_type), POINTER, OPTIONAL         :: girsanov_env
-
+      LOGICAL                                            :: do_girsanov = .FALSE.
+      REAL(KIND=dp), DIMENSION(:), POINTER               :: random_numbers
+      INTEGER, DIMENSION(:), POINTER                     :: thermo_map
+      LOGICAL, SAVE                                      :: first_call = .True.
+     
+      IF (PRESENT(girsanov_env) .AND. ASSOCIATED(girsanov_env)) THEN
+         do_girsanov = .TRUE.
+         IF(first_call) THEN
+            random_numbers => girsanov_env%degrees_of_freedom(:)%eta(1)
+         ELSE
+            random_numbers => girsanov_env%degrees_of_freedom(:)%eta(2)
+         END IF
+         thermo_map => girsanov_env%thermo_map
+         first_call = .not.(first_call)
+      END IF
       DO i = 1, csvr%loc_num_csvr
          imap = map_info%map_index(i)
          kin_energy = map_info%s_kin(imap)
@@ -231,15 +245,22 @@ CONTAINS
          ndeg = csvr%nvt(i)%degrees_of_freedom
          taut = csvr%tau_csvr/csvr%dt_fact
          rng_stream => csvr%nvt(i)%gaussian_rng_stream
-         IF (i == 1 ) THEN
+         jmap = 0
+         IF (do_girsanov) THEN
+            CPASSERT(ndeg == 1)
+            jmap = thermo_map(i)
+         END IF
+         IF (jmap /= 0) THEN
             map_info%v_scale(imap) = rescaling_factor(kin_energy, kin_target, ndeg, taut, &
-                                                      rng_stream, girsanov_env=girsanov_env)
+                                                      rng_stream, rn1=random_numbers(jmap))
          ELSE
             map_info%v_scale(imap) = rescaling_factor(kin_energy, kin_target, ndeg, taut, &
                                                       rng_stream)
          END IF
       END DO
-      
+
+      NULLIFY(thermo_map)
+      NULLIFY(random_numbers)
 
    END SUBROUTINE do_csvr
 

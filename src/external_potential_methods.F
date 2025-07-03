@@ -25,6 +25,9 @@ MODULE external_potential_methods
                                               finalizef,&
                                               initf,&
                                               parsef
+   USE girsanov_types,                  ONLY: girsanov_env_type,&
+                                              update_girsanov_environment                           
+   USE input_constants,                 ONLY: grw_bias_external                                           
    USE input_section_types,             ONLY: section_vals_get,&
                                               section_vals_get_subs_vals,&
                                               section_vals_type,&
@@ -48,11 +51,15 @@ CONTAINS
 ! **************************************************************************************************
 !> \brief ...
 !> \param force_env ...
+!> \param girsanov_env ...
 !> \date 03.2008
 !> \author Teodoro Laino - University of Zurich [tlaino]
 ! **************************************************************************************************
-   SUBROUTINE add_external_potential(force_env)
+   SUBROUTINE add_external_potential(force_env, girsanov_env)
       TYPE(force_env_type), POINTER                      :: force_env
+      TYPE(girsanov_env_type), INTENT(INOUT), POINTER, OPTIONAL &
+                                                         :: girsanov_env      
+      LOGICAL                                            :: do_girsanov = .FALSE.      
 
       CHARACTER(len=*), PARAMETER :: routineN = 'add_external_potential'
 
@@ -64,7 +71,8 @@ CONTAINS
                                                             natom, rep
       INTEGER, DIMENSION(:), POINTER                     :: iatms, nparticle
       LOGICAL                                            :: useall
-      REAL(KIND=dp)                                      :: dedf, dx, energy, err, lerr
+      REAL(KIND=dp)                                      :: dedf, dx, energy, update_energy, err, &
+                                                            lerr
       REAL(KIND=dp), DIMENSION(:), POINTER               :: my_val
       TYPE(cp_logger_type), POINTER                      :: logger
       TYPE(cp_subsys_type), POINTER                      :: subsys
@@ -77,6 +85,11 @@ CONTAINS
       ext_pot_section => section_vals_get_subs_vals(force_env%force_env_section, &
                                                     "EXTERNAL_POTENTIAL")
       CALL section_vals_get(ext_pot_section, n_repetition=n_var)
+
+      IF(PRESENT(girsanov_env) .AND. ASSOCIATED(girsanov_env)) THEN
+         do_girsanov = (girsanov_env%mode == grw_bias_external)
+      END IF
+
       DO rep = 1, n_var
          natom = 0
          logger => cp_get_default_logger()
@@ -91,7 +104,6 @@ CONTAINS
          NULLIFY (particles, subsys)
          CALL force_env_get(force_env, subsys=subsys)
          CALL cp_subsys_get(subsys, particles=particles)
-         CALL force_env_get(force_env, additional_potential=energy)
          CALL section_vals_val_get(ext_pot_section, "ATOMS_LIST", n_rep_val=a_var, i_rep_section=rep)
          DO k = 1, a_var
             CALL section_vals_val_get(ext_pot_section, "ATOMS_LIST", i_rep_val=k, i_vals=iatms, i_rep_section=rep)
@@ -113,7 +125,7 @@ CONTAINS
             my_val(2) = particles%els(iatom)%r(2)
             my_val(3) = particles%els(iatom)%r(3)
 
-            energy = energy + evalf(1, my_val)
+            update_energy = update_energy + evalf(1, my_val)
             DO j = 1, 3
                dedf = evalfd(1, j, my_val, dx, err)
                IF (ABS(err) > lerr) THEN
@@ -127,9 +139,17 @@ CONTAINS
                                TRIM(def_error)//' .')
                END IF
                particles%els(iatom)%f(j) = particles%els(iatom)%f(j) - dedf
+               IF(do_girsanov) THEN
+                  CALL update_girsanov_environment(girsanov_env, i_particle=iatom, i_dim=j, grad_U=dedf)
+               END IF               
             END DO
          END DO
+         CALL force_env_get(force_env, additional_potential=energy)
+         energy = energy + update_energy
          CALL force_env_set(force_env, additional_potential=energy)
+         IF(do_girsanov) THEN
+            CALL update_girsanov_environment(girsanov_env, U=update_energy)
+         END IF             
          DEALLOCATE (my_par)
          DEALLOCATE (my_val)
          IF (a_var /= 0) THEN

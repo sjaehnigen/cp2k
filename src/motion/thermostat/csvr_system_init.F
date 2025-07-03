@@ -15,6 +15,7 @@ MODULE csvr_system_init
                                               csvr_to_shell_mapping
    USE csvr_system_types,               ONLY: csvr_system_type
    USE distribution_1d_types,           ONLY: distribution_1d_type
+   USE girsanov_types,                  ONLY: girsanov_env_type
    USE input_section_types,             ONLY: section_vals_get,&
                                               section_vals_get_subs_vals,&
                                               section_vals_type,&
@@ -73,7 +74,7 @@ CONTAINS
 ! **************************************************************************************************
    SUBROUTINE initialize_csvr_part(thermostat_info, simpar, local_molecules, &
                                    molecule, molecule_kind_set, para_env, csvr, csvr_section, &
-                                   gci)
+                                   gci, girsanov_env)
 
       TYPE(thermostat_info_type), POINTER                :: thermostat_info
       TYPE(simpar_type), POINTER                         :: simpar
@@ -84,9 +85,11 @@ CONTAINS
       TYPE(csvr_system_type), POINTER                    :: csvr
       TYPE(section_vals_type), POINTER                   :: csvr_section
       TYPE(global_constraint_type), POINTER              :: gci
+      TYPE(girsanov_env_type), POINTER, OPTIONAL         :: girsanov_env
 
       CALL csvr_to_particle_mapping(thermostat_info, simpar, local_molecules, &
-                                    molecule, molecule_kind_set, csvr, para_env, gci)
+                                    molecule, molecule_kind_set, csvr, para_env, gci,&
+                                    girsanov_env=girsanov_env)
       CALL restart_csvr(csvr, csvr_section)
 
    END SUBROUTINE initialize_csvr_part

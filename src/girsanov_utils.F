@@ -12,7 +12,9 @@
 !> \author Sascha Jähnigen - Freie Universität Berlin
 ! **************************************************************************************************
 MODULE girsanov_utils
-   USE girsanov_types,                  ONLY: girsanov_env_type
+   USE girsanov_types,                  ONLY: girsanov_env_type,&
+                                              roll_girsanov_environment,&
+                                              degree_of_freedom_type
    USE cp_log_handling,                 ONLY: cp_get_default_logger,&
                                               cp_logger_type
    USE cp_output_handling,              ONLY: cp_print_key_finished_output,&
@@ -32,12 +34,61 @@ MODULE girsanov_utils
    IMPLICIT NONE
 
    PRIVATE
-   PUBLIC ::  write_reweighting_factor
+   PUBLIC :: calculate_reweighting_factor, &
+             write_reweighting_factor
+             
 
 ! *** Global parameters ***
    CHARACTER(len=*), PARAMETER, PRIVATE :: moduleN = 'girsanov_utils'
 
 CONTAINS
+
+
+! **************************************************************************************************
+!> \brief Calculates the Girsanov reweighting factor(s) based on integration step data
+!> \param barostat ...
+!> \param simpar ...
+!> \param my_pos ...
+!> \param my_act ...
+!> \param cell ...
+!> \param itimes ...
+!> \param time ...
+!> \par History
+!>      06.2025 created [sjaehnigen]
+!> \author Sascha Jähnigen - Freie Universität Berlin
+! **************************************************************************************************
+   SUBROUTINE calculate_reweighting_factor(girsanov_env)
+      TYPE(girsanov_env_type), POINTER                   :: girsanov_env
+      TYPE(degree_of_freedom_type), DIMENSION(:), POINTER &
+                                                         :: dof
+      REAL(KIND=dp), POINTER                             :: S_k
+      REAL(KIND=dp)                                      ::  weight
+      INTEGER                                            :: j
+
+      CHARACTER(LEN=*), PARAMETER                        :: routineN = 'calculate_reweighting_factor'
+      INTEGER                                            :: handle
+      
+      CALL timeset(routineN, handle)
+
+      dof => girsanov_env%degrees_of_freedom
+      S_k => girsanov_env%delta_S
+
+      IF (ASSOCIATED(girsanov_env)) THEN
+         DO j=1, SIZE(dof)
+            weight = SQRT(dof(j)%mass)
+            dof(j)%delta_eta(1) = girsanov_env%prefactor_eta_1 / weight * dof(j)%grad_U(1)
+            dof(j)%delta_eta(2) = girsanov_env%prefactor_eta_2 / weight * dof(j)%grad_U(2)
+            S_k = S_k + dof(j)%eta(1)*dof(j)%delta_eta(1) + 0.5_dp*dof(j)%delta_eta(1)**2 &
+                      + dof(j)%eta(2)*dof(j)%delta_eta(2) + 0.5_dp*dof(j)%delta_eta(2)**2
+         ENDDO
+      END IF
+
+      NULLIFY(dof)
+
+      CALL timestop(handle)
+
+   END SUBROUTINE calculate_reweighting_factor
+
 ! **************************************************************************************************
 !> \brief Write Girsanov reweighting factor(s) during an MD run
 !> \param barostat ...
@@ -51,7 +102,7 @@ CONTAINS
 !>      12.2024 created [sjaehnigen]
 !> \author Sascha Jähnigen - Freie Universität Berlin
 ! **************************************************************************************************
-   SUBROUTINE write_reweighting_factor(girsanov_env) ! barostat, simpar, my_pos, my_act, cell, itimes, time)
+   SUBROUTINE write_reweighting_factor(girsanov_env)
       TYPE(girsanov_env_type), POINTER                   :: girsanov_env
 !      TYPE(barostat_type), POINTER                       :: barostat
 !      TYPE(simpar_type), INTENT(IN)                      :: simpar
@@ -86,9 +137,14 @@ CONTAINS
 !         CALL cp_print_key_finished_output(baro, logger, barostat%section, "PRINT%ENERGY")
 !      END IF
       IF (ASSOCIATED(girsanov_env)) THEN
-          CALL cp_warn(__LOCATION__, &
-                     ">>> I was told to write Girsanov output! "// &
-                     "Congratulations!")
+          write (*,*) 'Girsanov U', girsanov_env%U
+          write (*,*) "GIRSANOV action S", girsanov_env%delta_S
+          write (*,*) 'Girsanov grad U old', girsanov_env%degrees_of_freedom(:)%grad_U(1)
+          write (*,*) 'Girsanov grad U new', girsanov_env%degrees_of_freedom(:)%grad_U(2)
+         !  write (*,*) 'Girsanov eta1', girsanov_env%degrees_of_freedom(:)%eta(1)
+         !  write (*,*) 'Girsanov eta2', girsanov_env%degrees_of_freedom(:)%eta(2)
+         ! reset S after output
+          girsanov_env%delta_S = 0.0_dp
       END IF
 
    END SUBROUTINE write_reweighting_factor

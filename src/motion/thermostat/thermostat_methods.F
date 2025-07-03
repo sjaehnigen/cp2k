@@ -110,7 +110,7 @@ CONTAINS
 !> \author Teodoro Laino
 ! **************************************************************************************************
    SUBROUTINE create_thermostats(thermostats, md_section, force_env, simpar, &
-                                 para_env, globenv, global_section)
+                                 para_env, globenv, global_section, girsanov_env)
       TYPE(thermostats_type), POINTER                    :: thermostats
       TYPE(section_vals_type), POINTER                   :: md_section
       TYPE(force_env_type), POINTER                      :: force_env
@@ -118,6 +118,7 @@ CONTAINS
       TYPE(mp_para_env_type), POINTER                    :: para_env
       TYPE(global_environment_type), POINTER             :: globenv
       TYPE(section_vals_type), POINTER                   :: global_section
+      TYPE(girsanov_env_type), POINTER, OPTIONAL         :: girsanov_env
 
       CHARACTER(LEN=default_path_length)                 :: binary_restart_file_name
       INTEGER                                            :: n_rep, region, thermostat_type
@@ -264,7 +265,7 @@ CONTAINS
                   CALL initialize_csvr_part(thermostats%thermostat_info_part, simpar, local_molecules, &
                                             molecules%els, molecule_kinds%els, para_env, &
                                             thermostats%thermostat_part%csvr, csvr_section=work_section, &
-                                            gci=gci)
+                                            gci=gci, girsanov_env=girsanov_env)
                ELSE IF (thermostats%thermostat_part%type_of_thermostat == do_thermo_al) THEN
                   ! Initialize or possibly restart Ad-Langevin thermostat on Particles
                   work_section => section_vals_get_subs_vals(thermo_part_section, "AD_LANGEVIN")
@@ -590,7 +591,7 @@ CONTAINS
                                                             core_particle_set(:)
       REAL(KIND=dp), INTENT(INOUT), OPTIONAL             :: vel(:, :), shell_vel(:, :), &
                                                             core_vel(:, :)
-      TYPE(girsanov_env_type), POINTER, INTENT(INOUT), OPTIONAL    :: girsanov_env
+      TYPE(girsanov_env_type), POINTER,  OPTIONAL        :: girsanov_env
 
       IF (ASSOCIATED(thermostat)) THEN
          IF (thermostat%type_of_thermostat == do_thermo_nose) THEN
