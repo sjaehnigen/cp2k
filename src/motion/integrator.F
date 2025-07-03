@@ -61,7 +61,8 @@ MODULE integrator
    USE force_env_methods,               ONLY: force_env_calc_energy_force
    USE force_env_types,                 ONLY: force_env_get,&
                                               force_env_type
-   USE girsanov_types,                  ONLY: girsanov_env_type  
+   USE girsanov_types,                  ONLY: girsanov_env_type
+   USE girsanov_utils,                  ONLY: calculate_reweighting_factor  
    USE global_types,                    ONLY: global_environment_type
    USE input_constants,                 ONLY: ehrenfest,&
                                               npe_f_ensemble,&
@@ -941,7 +942,7 @@ CONTAINS
       INTEGER                                            :: ivar, nparticle, nparticle_kind, nshell
       INTEGER, POINTER                                   :: itimes
       LOGICAL                                            :: shell_adiabatic, shell_check_distance, &
-                                                            shell_present
+                                                            shell_present, do_girsanov=.FALSE.
       REAL(KIND=dp)                                      :: dt
       REAL(KIND=dp), DIMENSION(:), POINTER               :: rand
       TYPE(atomic_kind_list_type), POINTER               :: atomic_kinds
@@ -979,6 +980,10 @@ CONTAINS
                       thermostat_shell=thermostat_shell, para_env=para_env, &
                       itimes=itimes)
       dt = simpar%dt
+
+      IF (ASSOCIATED(girsanov_env)) THEN
+         do_girsanov = .TRUE.
+      END IF
 
       CALL force_env_get(force_env=force_env, subsys=subsys, cell=cell)
 
@@ -1023,10 +1028,6 @@ CONTAINS
 
       CALL allocate_tmp(md_env, tmp, nparticle, nshell, shell_adiabatic)
 
-      IF (ASSOCIATED(girsanov_env)) THEN
-          write (*,*) 'Girsanov1', girsanov_env%n0
-      END IF
-
       ! Apply Thermostat over the full set of particles
       IF (shell_adiabatic) THEN
          CALL apply_thermostat_particles(thermostat_part, force_env, molecule_kind_set, molecule_set, &
@@ -1039,13 +1040,6 @@ CONTAINS
       ELSE
          CALL apply_thermostat_particles(thermostat_part, force_env, molecule_kind_set, molecule_set, &
                                          particle_set, local_molecules, local_particles, para_env, girsanov_env=girsanov_env)
-      END IF
-
-      IF (ASSOCIATED(girsanov_env)) THEN
-          write (*,*) 'Girsanov2', girsanov_env%n0
-          write (*,*) 'Girsanov2', girsanov_env%fx
-          write (*,*) 'Girsanov2', girsanov_env%fy
-          write (*,*) 'Girsanov2', girsanov_env%fz
       END IF
 
       IF (simpar%constraint) CALL getold(gci, local_molecules, molecule_set, &
@@ -1128,7 +1122,7 @@ CONTAINS
 
       ! Update forces
       ![NB] let nvt work with force mixing which does not have consistent energies and forces
-      CALL force_env_calc_energy_force(force_env, require_consistent_energy_force=.FALSE.)
+      CALL force_env_calc_energy_force(force_env, require_consistent_energy_force=.FALSE., girsanov_env=girsanov_env)
 
       ! Metadynamics
       CALL metadyn_integrator(force_env, itimes, tmp%vel, rand=rand, girsanov_env=girsanov_env)
@@ -1156,12 +1150,6 @@ CONTAINS
                                          particle_set, local_molecules, local_particles, para_env, vel=tmp%vel, &
                                          girsanov_env=girsanov_env)
       END IF
-      IF (ASSOCIATED(girsanov_env)) THEN
-          write (*,*) 'Girsanov3', girsanov_env%n0
-          write (*,*) 'Girsanov3', girsanov_env%fx
-          write (*,*) 'Girsanov3', girsanov_env%fy
-          write (*,*) 'Girsanov3', girsanov_env%fz
-      END IF
 
       ! Broadcast the new particle velocities and deallocate temporary
       CALL update_dealloc_tmp(tmp, particle_set, shell_particle_set, &
@@ -1181,6 +1169,10 @@ CONTAINS
       CALL virial_evaluate(atomic_kind_set, particle_set, &
                            local_particles, virial, para_env)
 
+      ! Girsanov reweighting: Evaluate integration step data
+      IF (do_girsanov) THEN
+          CALL calculate_reweighting_factor(girsanov_env)
+      END IF
    END SUBROUTINE nvt
 
 ! **************************************************************************************************

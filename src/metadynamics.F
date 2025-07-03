@@ -34,10 +34,12 @@ MODULE metadynamics
                               cp_subsys_type
    USE force_env_types, ONLY: force_env_get, &
                               force_env_type
-   USE girsanov_types, ONLY: girsanov_env_type                          
+   USE girsanov_types, ONLY: girsanov_env_type, &
+                             update_girsanov_environment                           
    USE input_constants, ONLY: do_wall_m, &
                               do_wall_p, &
-                              do_wall_reflective
+                              do_wall_reflective, &
+                              grw_bias_metadynamics
    USE input_section_types, ONLY: section_vals_get, &
                                   section_vals_get_subs_vals, &
                                   section_vals_type, &
@@ -228,6 +230,7 @@ CONTAINS
 !> \param itimes ...
 !> \param vel ...
 !> \param rand ...
+!> \param girsanov_env
 !> \date   01.2009
 !> \par History
 !>      01.2009 created
@@ -247,6 +250,8 @@ CONTAINS
       CHARACTER(len=*), PARAMETER :: routineN = 'metadyn_integrator'
 
       INTEGER                                  :: handle, plumed_itimes
+      LOGICAL                                  :: do_girsanov = .FALSE.      
+
 #if defined (__PLUMED2)
       INTEGER                                  :: i_part, natom_plumed
       TYPE(virial_type), POINTER               :: virial
@@ -256,16 +261,19 @@ CONTAINS
 #if defined (__PLUMED2)
       TYPE(meta_env_type), POINTER             :: meta_env
       REAL(KIND=dp), ALLOCATABLE, TARGET, DIMENSION(:) :: mass_plumed
-      REAL(KIND=dp), TARGET, DIMENSION(3, 3)    :: plu_vir, celltbt
+      REAL(KIND=dp), TARGET, DIMENSION(3, 3)   :: plu_vir, celltbt
       REAL(KIND=dp), TARGET                    :: stpcfg
+      REAL(KIND=dp)                            :: bias_plumed
       REAL(KIND=dp), ALLOCATABLE, TARGET, &
-         DIMENSION(:)                           :: pos_plumed_x, pos_plumed_y, pos_plumed_z
+         DIMENSION(:)                          :: pos_plumed_x, pos_plumed_y, pos_plumed_z
       REAL(KIND=dp), ALLOCATABLE, TARGET, &
-         DIMENSION(:)                           :: force_plumed_x, force_plumed_y, force_plumed_z
+         DIMENSION(:)                          :: force_plumed_x, force_plumed_y, force_plumed_z
 #endif
 
       CALL timeset(routineN, handle)
-
+      IF(PRESENT(girsanov_env) .AND. ASSOCIATED(girsanov_env)) THEN
+         do_girsanov = (girsanov_env%mode == grw_bias_metadynamics)
+      END IF
       ! Apply Metadynamics
       IF (ASSOCIATED(force_env%meta_env)) THEN
          IF (force_env%meta_env%use_plumed .EQV. .TRUE.) THEN
@@ -283,6 +291,11 @@ CONTAINS
             ALLOCATE (force_plumed_z(natom_plumed))
 
             ALLOCATE (mass_plumed(natom_plumed))
+
+            force_plumed_x(:) = 0.0d0
+            force_plumed_y(:) = 0.0d0
+            force_plumed_z(:) = 0.0d0
+            bias_plumed = 0.0d0
 
             DO i_part = 1, natom_plumed
                pos_plumed_x(i_part) = subsys%particles%els(i_part)%r(1)
@@ -313,7 +326,6 @@ CONTAINS
             ! Do not feed the previous step's bias back into the ENERGY CV.
             meta_env%plumed_bias = 0.0_dp
             CALL force_env_get(force_env, potential_energy=stpcfg)
-
             CALL plumed_gcmd_int("setStep"//CHAR(0), plumed_itimes)
             CALL plumed_gcmd_doubles("setPositionsX"//CHAR(0), pos_plumed_x(:))
             CALL plumed_gcmd_doubles("setPositionsY"//CHAR(0), pos_plumed_y(:))
@@ -341,13 +353,12 @@ CONTAINS
                subsys%particles%els(i_part)%f(2) = force_plumed_y(i_part)
                subsys%particles%els(i_part)%f(3) = force_plumed_z(i_part)
             END DO
-            IF (PRESENT(girsanov_env)) THEN
-               IF (ASSOCIATED(girsanov_env)) THEN
-                  ! Later: save the full array
-                  girsanov_env%fx = force_plumed_x(1)
-                  girsanov_env%fy = force_plumed_y(1)
-                  girsanov_env%fz = force_plumed_z(1)
-               END IF
+            IF (do_girsanov) THEN
+               CALL plumed_gcmd_double("getBias"//CHAR(0), bias_plumed)
+               CALL update_girsanov_environment(girsanov_env, U=bias_plumed)   
+               CALL update_girsanov_environment(girsanov_env, index=1, grad_U=-force_plumed_x(:))
+               CALL update_girsanov_environment(girsanov_env, index=2, grad_U=-force_plumed_y(:))
+               CALL update_girsanov_environment(girsanov_env, index=3, grad_U=-force_plumed_z(:))
             END IF
 
             DEALLOCATE (pos_plumed_x, pos_plumed_y, pos_plumed_z)
@@ -369,10 +380,8 @@ CONTAINS
                IF (.NOT. PRESENT(rand)) THEN
                   CPABORT("Langevin on COLVAR not implemented for this MD ensemble!")
                END IF
-               IF (PRESENT(girsanov_env)) THEN
-                   IF (ASSOCIATED(girsanov_env)) THEN
-                      CPABORT("Langevin on COLVAR does not support Girsanov reweighting!")
-                   END IF
+               IF (do_girsanov) THEN
+                  CPABORT("Langevin on COLVAR does not support Girsanov reweighting!")
                END IF
                !    *** Velocity Verlet for Langevin S(t)->S(t+1)
                CALL metadyn_position_colvar(force_env)
@@ -411,6 +420,7 @@ CONTAINS
 
       INTEGER                                            :: handle, i, i_c, icolvar, ii, iwall
       LOGICAL                                            :: explicit
+      LOGICAL                                            :: do_girsanov = .FALSE.      
       REAL(kind=dp)                                      :: check_val, diff_ss, dt, ekin_w, fac_t, &
                                                             fft, norm, rval, scal, scalf, &
                                                             ss0_test, tol_ekin
@@ -430,6 +440,10 @@ CONTAINS
       logger => cp_get_default_logger()
       NULLIFY (colvar_p, subsys, cv, ss0_section, vvp_section)
       CALL force_env_get(force_env, subsys=subsys)
+
+      IF(PRESENT(girsanov_env) .AND. ASSOCIATED(girsanov_env)) THEN
+         do_girsanov = (girsanov_env%mode == grw_bias_metadynamics)
+      END IF
 
       dt = meta_env%dt
       IF (.NOT. meta_env%restart) meta_env%n_steps = meta_env%n_steps + 1
@@ -512,20 +526,19 @@ CONTAINS
                i = colvar_p(icolvar)%colvar%i_atom(ii)
                fft = cv%ff_hills + cv%ff_walls
                particles%els(i)%f = particles%els(i)%f + fft*colvar_p(icolvar)%colvar%dsdr(:, ii)
-               IF(PRESENT(girsanov_env)) THEN
-                  IF (ASSOCIATED(girsanov_env).AND.(i==1)) THEN
-                     girsanov_env%fx = fft*colvar_p(icolvar)%colvar%dsdr(1, ii)
-                     girsanov_env%fy = fft*colvar_p(icolvar)%colvar%dsdr(2, ii)
-                     girsanov_env%fz = fft*colvar_p(icolvar)%colvar%dsdr(3, ii)
-                  END IF
+               IF(do_girsanov) THEN
+                  CALL update_girsanov_environment(girsanov_env, index=i, index_is_particle=.True., &
+                                                   grad_U=-fft*colvar_p(icolvar)%colvar%dsdr(:, ii))
               END IF
             END DO
          END DO
+         IF(do_girsanov) THEN
+            CALL update_girsanov_environment(girsanov_env, &
+                                             U=meta_env%hills_env%energy + meta_env%epot_walls)
+         END IF
       ELSE
-         IF (PRESENT(girsanov_env)) THEN
-             IF (ASSOCIATED(girsanov_env)) THEN
-                 CPABORT("Extended Lagrangian COLVAR does not support Girsanov reweighting!")
-             END IF
+         IF(do_girsanov) THEN
+            CPABORT("Extended Lagrangian Metadynamics incompatible with Girsanov reweighting")
          END IF
          meta_env%ekin_s = 0.0_dp
          meta_env%epot_s = 0.0_dp
@@ -611,6 +624,9 @@ CONTAINS
       DO i_c = 1, meta_env%n_colvar
          cv => meta_env%metavar(i_c)
          IF (cv%do_wall) THEN
+            IF(do_girsanov) THEN
+                CPABORT("Reflective walls incompatible with Girsanov reweighting!")
+            END IF         
             DO iwall = 1, SIZE(cv%walls)
                SELECT CASE (cv%walls(iwall)%id_type)
                CASE (do_wall_reflective)

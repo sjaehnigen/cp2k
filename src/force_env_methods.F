@@ -85,15 +85,16 @@ MODULE force_env_methods
                                               finalizef,&
                                               initf,&
                                               parsef
+   USE girsanov_types,                  ONLY: girsanov_env_type
    USE global_types,                    ONLY: global_environment_type,&
                                               globenv_retain
    USE grrm_utils,                      ONLY: write_grrm
    USE input_constants,                 ONLY: &
         cell_opt_run, debug_run, dfet, dmfet, do_method_gapw, do_method_gapw_xc, do_method_gpw, &
         do_method_lrigpw, do_method_ofgpw, do_method_rigpw, driver_run, ehrenfest, geo_opt_run, &
-        mix_cdft, mix_coupled, mix_generic, mix_linear_combination, mix_minimum, mix_restrained, &
-        mixed_cdft_serial, mol_dyn_run, use_bazant_eip, use_lenosky_eip, use_stillinger_weber_eip, &
-        use_tersoff_eip
+        grw_bias_mixing, mix_cdft, mix_coupled, mix_generic, mix_linear_combination, mix_minimum, &
+        mix_restrained, mixed_cdft_serial, mol_dyn_run, use_bazant_eip, use_lenosky_eip, &
+        use_stillinger_weber_eip, use_tersoff_eip
    USE input_section_types,             ONLY: section_vals_get_subs_vals,&
                                               section_vals_retain,&
                                               section_vals_type,&
@@ -210,15 +211,19 @@ CONTAINS
 !> \param require_consistent_energy_force ...
 !> \param linres ...
 !> \param calc_stress_tensor ...
+!> \param girsanov_env ... environment to collect the bias force for dynamical reweighting [SJ]
 !> \author CJM & fawzi
 ! **************************************************************************************************
    RECURSIVE SUBROUTINE force_env_calc_energy_force(force_env, calc_force, &
                                                     consistent_energies, skip_external_control, eval_energy_forces, &
-                                                    require_consistent_energy_force, linres, calc_stress_tensor)
+                                                    require_consistent_energy_force, linres, calc_stress_tensor, &
+                                                    girsanov_env)
 
       TYPE(force_env_type), POINTER                      :: force_env
       LOGICAL, INTENT(IN), OPTIONAL :: calc_force, consistent_energies, skip_external_control, &
          eval_energy_forces, require_consistent_energy_force, linres, calc_stress_tensor
+      TYPE(girsanov_env_type), POINTER, INTENT(INOUT), OPTIONAL &
+                                                         :: girsanov_env
 
       REAL(kind=dp), PARAMETER                           :: ateps = 1.0E-6_dp
 
@@ -368,11 +373,11 @@ CONTAINS
          ! Constraints ONLY of Fixed Atom type
          CALL fix_atom_control(force_env)
          ! All Restraints
-         CALL restraint_control(force_env)
+         CALL restraint_control(force_env, girsanov_env=girsanov_env)
          ! Virtual Sites
          CALL vsite_force_control(force_env)
          ! External Potential
-         CALL add_external_potential(force_env)
+         CALL add_external_potential(force_env, girsanov_env=girsanov_env)
          ! Rescale forces if requested
          CALL rescale_forces(force_env)
       END IF
