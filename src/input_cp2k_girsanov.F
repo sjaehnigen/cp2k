@@ -24,7 +24,8 @@ MODULE input_cp2k_girsanov
                                               grw_bias_mixing,&
                                               grw_perturbation_linres
    USE cp_output_handling,              ONLY: cp_print_key_section_create,&
-                                              high_print_level
+                                              high_print_level,&
+                                              low_print_level
    USE cp_units,                        ONLY: cp_unit_to_cp2k
    USE input_keyword_types,             ONLY: keyword_create,&
                                               keyword_release,&
@@ -192,15 +193,35 @@ CONTAINS
                           description="Collects all print keys for Girsanov reweighting.", &
                           n_keywords=1, n_subsections=0, repeats=.FALSE.)
 
-      CALL cp_print_key_section_create(print_key, __LOCATION__, "REWEIGHTING_FACTORS", &
+      CALL cp_print_key_section_create(print_key, __LOCATION__, "GIRSANOV_INFO", &
+                                       description="Controls output information of the Girsanov environment.", &
+                                       print_level=low_print_level, common_iter_levels=1, &
+                                       filename="__STD_OUT__")
+      CALL section_add_subsection(section, print_key)
+      CALL section_release(print_key)
+
+      CALL cp_print_key_section_create(print_key, __LOCATION__, "REWEIGHTING_FACTOR", &
                                        description="Controls the output of the static and dynamic reweighting factors.", &
                                        print_level=high_print_level, common_iter_levels=1, &
                                        filename="")
-      ! Switch bewteen RNG and RW factors through format keyword? (example taken from velocities)
-      ! CALL add_format_keyword(keyword, print_key, pos=.FALSE., &
-      !                         description="Specifies the format of the output file for the velocities.")
       CALL section_add_subsection(section, print_key)
       CALL section_release(print_key)
+
+      CALL cp_print_key_section_create(print_key, __LOCATION__, "RANDOM_NUMBERS", &
+                                       description="Controls the output of the random numbers and their changes per "// &
+                                                   "degree of freedom (optional: according to ATOM_LIST).", &
+                                       print_level=high_print_level, common_iter_levels=1, &
+                                       filename="")
+      CALL section_add_subsection(section, print_key)
+      CALL section_release(print_key)    
+
+      CALL cp_print_key_section_create(print_key, __LOCATION__, "BIAS_FORCE", &
+                                       description="Controls the output of the bias force acting on every "// &
+                                                   "degree of freedom (optional: according to ATOM_LIST).", &
+                                       print_level=high_print_level, common_iter_levels=1, &
+                                       filename="")
+      CALL section_add_subsection(section, print_key)
+      CALL section_release(print_key)            
    END SUBROUTINE create_print_section
 
 END MODULE input_cp2k_girsanov

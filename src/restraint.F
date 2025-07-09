@@ -207,7 +207,7 @@ CONTAINS
          CALL force_env%para_env%sum(energy_colv)
          CALL update_particle_set(particle_set, force_env%para_env, for=force, add=.TRUE.)
          IF(do_girsanov) THEN
-            CALL update_girsanov_environment(girsanov_env, grad_U=-force)
+            CALL update_girsanov_environment(girsanov_env, grad_U=force)
          END IF
          force = 0.0_dp
          n_restraint = 0
@@ -235,7 +235,7 @@ CONTAINS
                particle_set(iparticle)%f = particle_set(iparticle)%f + force(:, iparticle)
             END DO
             IF(do_girsanov) THEN
-               CALL update_girsanov_environment(girsanov_env, grad_U=-force)
+               CALL update_girsanov_environment(girsanov_env, grad_U=force)
             END IF            
          END IF
       END IF
@@ -248,7 +248,7 @@ CONTAINS
       CALL force_env_set(force_env=force_env, additional_potential=extended_energies)
 
       IF(do_girsanov) THEN
-         CALL update_girsanov_environment(girsanov_env, U=update_energies)
+         CALL update_girsanov_environment(girsanov_env, U=-update_energies)
       END IF          
       CALL timestop(handle)
 

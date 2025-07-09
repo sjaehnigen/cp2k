@@ -1171,7 +1171,7 @@ CONTAINS
 
       ! Girsanov reweighting: Evaluate integration step data
       IF (do_girsanov) THEN
-          CALL calculate_reweighting_factor(girsanov_env)
+          CALL calculate_reweighting_factor(girsanov_env, para_env)
       END IF
    END SUBROUTINE nvt
 

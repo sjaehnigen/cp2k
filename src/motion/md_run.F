@@ -327,7 +327,7 @@ CONTAINS
       CALL fe_env_create(fe_env, free_energy_section)
 
       ! If requested, initialize Girsanov with the collected data
-      call initialize_girsanov_environment(girsanov_env)
+      call initialize_girsanov_environment(girsanov_env, md_section)
 
       CALL set_md_env(md_env=md_env, simpar=simpar, fe_env=fe_env, cell=cell, &
                       force_env=force_env, girsanov_env=girsanov_env)
@@ -530,8 +530,6 @@ CONTAINS
          CALL update_expected_temperature(md_env)
 
          ! Velocity Verlet Integrator
-         write (*,*) "-------- GIRSANOV step --------", istep
-         
          CALL velocity_verlet(md_env, globenv)
 
          ! Close Shake output if requested...
