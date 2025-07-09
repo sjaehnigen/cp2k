@@ -788,7 +788,7 @@ CONTAINS
                      map_info%p_kin(jj, ii)%point => map_info%s_kin(number)
                      map_info%p_scale(jj, ii)%point => map_info%v_scale(number)
                      IF (do_girsanov) THEN
-                        girsanov_env%thermo_map(number) = girsanov_env%index_map(jj, ii)
+                        girsanov_env%thermo_map(number) = girsanov_env%index_map(jj, ielement)
                      END IF
                   END DO
                END DO

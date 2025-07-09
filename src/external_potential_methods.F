@@ -140,7 +140,7 @@ CONTAINS
                END IF
                particles%els(iatom)%f(j) = particles%els(iatom)%f(j) - dedf
                IF(do_girsanov) THEN
-                  CALL update_girsanov_environment(girsanov_env, i_particle=iatom, i_dim=j, grad_U=dedf)
+                  CALL update_girsanov_environment(girsanov_env, i_particle=iatom, i_dim=j, grad_U=-dedf)
                END IF               
             END DO
          END DO
@@ -148,7 +148,7 @@ CONTAINS
          energy = energy + update_energy
          CALL force_env_set(force_env, additional_potential=energy)
          IF(do_girsanov) THEN
-            CALL update_girsanov_environment(girsanov_env, U=update_energy)
+            CALL update_girsanov_environment(girsanov_env, U=-update_energy)
          END IF             
          DEALLOCATE (my_par)
          DEALLOCATE (my_val)

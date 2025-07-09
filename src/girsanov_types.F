@@ -14,6 +14,10 @@
 
 MODULE girsanov_types
    USE atomic_kind_list_types,          ONLY: atomic_kind_list_type  
+   USE cp_log_handling,                 ONLY: cp_get_default_logger,&
+                                              cp_logger_type 
+   USE cp_output_handling,              ONLY: cp_print_key_finished_output,&
+                                              cp_print_key_unit_nr                                                
    USE cp_subsys_types,                 ONLY: cp_subsys_get,&
                                               cp_subsys_type
    USE distribution_1d_types,           ONLY: distribution_1d_type
@@ -32,6 +36,7 @@ MODULE girsanov_types
    USE memory_utilities,                ONLY: reallocate
    USE particle_list_types,             ONLY: particle_list_type
    USE physcon,                         ONLY: boltzmann, &
+                                              femtoseconds, &
                                               joule, &
                                               kelvin
    USE simpar_types,                    ONLY: simpar_type
@@ -82,7 +87,7 @@ MODULE girsanov_types
       REAL(KIND=dp)                                      :: U = 0.0_dp
       REAL(KIND=dp)                                      :: delta_S = 0.0_dp
       REAL(KIND=dp)                                      :: xi, prefactor_eta_1, prefactor_eta_2,&
-                                                            temperature, dt
+                                                            temperature, dt, kBT
       TYPE(degree_of_freedom_type), DIMENSION(:), POINTER &
                                                          :: degrees_of_freedom => NULL()
    END TYPE
@@ -223,7 +228,6 @@ CONTAINS
             END DO
          ENDDO
 
-
 !      INSERT ALL THE CHECKS HERE, such as: (since we have the md_section, why not?)
 !          check = barostat%virial_components == do_clv_xyz .OR. simpar%ensemble == npt_f_ensemble
 !          IF (.NOT. check) &
@@ -248,24 +252,31 @@ CONTAINS
 !>      07.2025 created [sjaehnigen]
 !> \author Sascha Jähnigen - Freie Universität Berlin
 ! **************************************************************************************************   
-   SUBROUTINE initialize_girsanov_environment(girsanov_env)
-      TYPE(girsanov_env_type), POINTER             :: girsanov_env
+   SUBROUTINE initialize_girsanov_environment(girsanov_env, md_section)
+      TYPE(girsanov_env_type), POINTER                   :: girsanov_env
+      TYPE(section_vals_type), POINTER                   :: md_section
 
       CHARACTER(LEN=*), PARAMETER                        :: routineN = 'initialize_girsanov_environment'
       INTEGER                                            :: handle    
       
+      TYPE(section_vals_type), POINTER                   :: girsanov_section
       REAL(KIND=dp)                                      :: f_prime, d_prime
 
       IF (ASSOCIATED(girsanov_env)) THEN
          CALL timeset(routineN, handle)      
 
+         girsanov_section => section_vals_get_subs_vals(md_section, "GIRSANOV")
+
+         girsanov_env%kBT = boltzmann/joule * girsanov_env%temperature*kelvin
          ! calculate parameters for update operators according to OBABO scheme
          d_prime = EXP(-0.5_dp * girsanov_env%xi * girsanov_env%dt)
-         f_prime = SQRT(boltzmann/joule * girsanov_env%temperature*kelvin * (1.0_dp - d_prime**2))
+         f_prime = SQRT(girsanov_env%kBT * (1.0_dp - d_prime**2))
          ! NB: division by SQRT(mass) on the fly in girsanov_utils.F
-         girsanov_env%prefactor_eta_1 = -0.5_dp * girsanov_env%dt / f_prime
+         girsanov_env%prefactor_eta_1 = 0.5_dp * girsanov_env%dt / f_prime
          girsanov_env%prefactor_eta_2 = girsanov_env%prefactor_eta_1 * d_prime
    
+         CALL girsanov_info(girsanov_env, girsanov_section)
+
          ! add print info to outfile
          CALL timestop(handle)
       END IF
@@ -334,7 +345,6 @@ CONTAINS
 !> \param girsanov_env ...
 !> \param i_particle ...
 !> \param i_dim ...
-!> \param i_step ...
 !> \param grad_U ... (add to what is there)
 !> \par History
 !>      02.2025 created [sjaehnigen]
@@ -350,7 +360,7 @@ CONTAINS
       CHARACTER(LEN=*), PARAMETER                        :: routineN = 'update_girsanov_environment_r0'
       INTEGER                                            :: handle
 
-      INTEGER                                            :: idx
+      INTEGER                                            :: i_entry
       INTEGER, POINTER, DIMENSION(:, :)                  :: index_map
 
       CALL timeset(routineN, handle)
@@ -360,9 +370,9 @@ CONTAINS
       dof => girsanov_env%degrees_of_freedom
       index_map => girsanov_env%index_map
 
-      idx = index_map(i_dim, i_particle)
-      IF (idx /= 0) THEN
-         dof(idx)%grad_U(2) = dof(idx)%grad_U(2) + grad_U
+      i_entry = index_map(i_dim, i_particle)
+      IF (i_entry /= 0) THEN
+         dof(i_entry)%grad_U(2) = dof(i_entry)%grad_U(2) + grad_U
       END IF
  
       NULLIFY(dof)
@@ -378,9 +388,9 @@ CONTAINS
 ! **************************************************************************************************
 !> \brief updates the Girsanov environment (rank-1 input for particle)
 !> \param girsanov_env ...
-!> \param i_particle ...
-!> \param i_step ...
+!> \param index ...
 !> \param grad_U ... (add to what is there)
+!> \param index_is_particle
 !> \par History
 !>      02.2025 created [sjaehnigen]
 !> \author Sascha Jähnigen - Freie Universität Berlin
@@ -396,7 +406,7 @@ CONTAINS
       CHARACTER(LEN=*), PARAMETER                        :: routineN = 'update_girsanov_environment_r1'
       INTEGER                                            :: handle
 
-      INTEGER                                            :: i, j, n_dim, n_atoms, idx1, idx2
+      INTEGER                                            :: i, j, n_dim, n_atoms, i_entry, i_particle
       INTEGER, POINTER, DIMENSION(:)                     :: atom_list
       INTEGER, POINTER, DIMENSION(:, :)                  :: index_map
       LOGICAL                                            :: index_is_dim
@@ -417,16 +427,16 @@ CONTAINS
 
       IF (.NOT. index_is_dim) THEN
          DO j=1, n_dim
-            idx1 = index_map(j, index)
-            IF (idx1 /= 0) THEN
-               dof(idx1)%grad_U(2) = dof(idx1)%grad_U(2) + grad_U(j)
+            i_entry = index_map(j, index)
+            IF (i_entry /= 0) THEN
+               dof(i_entry)%grad_U(2) = dof(i_entry)%grad_U(2) + grad_U(j)
             END IF
          END DO
       ELSE
          DO i=1, n_atoms
-            idx1 = (i-1)*n_dim+index
-            idx2 = atom_list(i)
-            dof(idx1)%grad_U(2) = dof(idx1)%grad_U(2) + grad_U(idx2)
+            i_particle = atom_list(i)
+            i_entry = index_map(index, i_particle)   
+            dof(i_entry)%grad_U(2) = dof(i_entry)%grad_U(2) + grad_U(i_particle)
          END DO         
       END IF
 
@@ -444,7 +454,6 @@ CONTAINS
 ! **************************************************************************************************
 !> \brief updates the Girsanov environment (rank-2 input)
 !> \param girsanov_env ...
-!> \param i_step ...
 !> \param grad_U ... (add to what is there)
 !> \par History
 !>      02.2025 created [sjaehnigen]
@@ -460,7 +469,8 @@ CONTAINS
       CHARACTER(LEN=*), PARAMETER                        :: routineN = 'update_girsanov_environment_r2'
       INTEGER                                            :: handle
 
-      INTEGER                                            :: i, j, n_atoms, n_dim, idx
+      INTEGER, POINTER, DIMENSION(:, :)                  :: index_map
+      INTEGER                                            :: i, j, n_atoms, n_dim, i_entry, i_particle
       INTEGER, POINTER, DIMENSION(:)                     :: atom_list
 
       CALL timeset(routineN, handle)
@@ -469,17 +479,20 @@ CONTAINS
 
       dof => girsanov_env%degrees_of_freedom
       n_atoms = girsanov_env%n_atoms
+      index_map => girsanov_env%index_map
       n_dim = girsanov_env%n_dim
       atom_list => girsanov_env%atom_list
 
       DO j=1, n_dim
          DO i=1, n_atoms
-            idx = atom_list(i)
-            dof((i-1)*n_dim+j)%grad_U(2) = dof((i-1)*n_dim+j)%grad_U(2) + grad_U(j, idx)
+            i_particle = atom_list(i)
+            i_entry = index_map(j, i_particle) 
+            dof(i_entry)%grad_U(2) = dof(i_entry)%grad_U(2) + grad_U(j, i_particle)
          END DO
       END DO 
 
       NULLIFY(dof)
+      NULLIFY(index_map)
       NULLIFY(atom_list)
 
       CALL timestop(handle)
@@ -509,5 +522,85 @@ CONTAINS
       END IF
 
    END SUBROUTINE release_girsanov_environment
+
+! **************************************************************************************************
+!> \brief prints info on Girsanov environment
+!> \param girsanov_env ...
+!> \par History
+!>      07.2025 created [sjaehnigen]
+!> \author Sascha Jähnigen - Freie Universität Berlin
+! **************************************************************************************************
+   SUBROUTINE girsanov_info(girsanov_env, section)
+      TYPE(girsanov_env_type), POINTER                   :: girsanov_env
+      TYPE(section_vals_type), POINTER                   :: section
+
+      INTEGER                                            :: iw
+      TYPE(cp_logger_type), POINTER                      :: logger
+      
+      TYPE(girsanov_env_type), POINTER                   :: grw
+      CHARACTER(len=18)                                  :: token, mode, source
+      CHARACTER(len=1000)                                :: output
+      INTEGER                                            :: i, start_idx, end_idx, linelen
+      INTEGER, PARAMETER                                 :: max_line_len = 30
+
+      NULLIFY (logger, grw)
+      logger => cp_get_default_logger()
+      iw = cp_print_key_unit_nr(logger, section, "PRINT%GIRSANOV_INFO", extension=".girsanov_log")
+      
+      grw => girsanov_env
+      IF (iw > 0) THEN
+         WRITE (iw, '(/,T2,A)') 'GIRSANOV| Dynamical reweighting information'
+         ! Xi, dt, temperature, atomlist(?)
+         SELECT CASE (grw%mode)
+         CASE(grw_bias_metadynamics)
+            mode = "Bias"
+            source = "Metadynamics"
+         CASE(grw_bias_external)
+            mode = "Bias"
+            source = "External Potential"
+         CASE(grw_bias_restraint)
+            mode = "Bias"
+            source = "Restraint"
+         END SELECT
+         WRITE (iw, '(T2,A,T57,A24)') 'GIRSANOV| Source ', TRIM(mode)//": "//TRIM(source)
+         WRITE (iw, '(T2,A,T63,F18.6)') 'GIRSANOV| Gamma [fs^-1]', grw%xi/femtoseconds
+         ! WRITE (iw, '(T2,A,T63,F18.1)') 'GIRSANOV| Temperature ', grw%temperature*kelvin
+         WRITE (iw, '(T2,A,T71,I10)') 'GIRSANOV| Number of monitored degrees of freedom ', SIZE(grw%degrees_of_freedom)
+         i = 1
+         output = ""
+         linelen = 0
+         DO WHILE (i <= grw%n_atoms)
+            start_idx = i
+            DO WHILE (i < grw%n_atoms .AND. grw%atom_list(i+1) == grw%atom_list(i) + 1)
+               i = i + 1
+            END DO
+            end_idx = i
+
+            IF (end_idx > start_idx + 1) THEN
+               WRITE(token, '(I0,"..",I0)') grw%atom_list(start_idx), grw%atom_list(end_idx)
+            ELSE IF (end_idx == start_idx + 1) THEN
+               WRITE(token, '(I0," ",I0)') grw%atom_list(start_idx), grw%atom_list(end_idx)
+            ELSE
+               WRITE(token, '(I0)') grw%atom_list(start_idx)
+            END IF
+
+            IF (linelen > 0) token = ' ' // TRIM(token)
+            IF (linelen + LEN_TRIM(token) > max_line_len) THEN
+               WRITE (iw, '(T2,A,T51,A30)') 'GIRSANOV| Atom list ', TRIM(output)
+               output = TRIM(token)
+            ELSE
+               output = TRIM(output) // TRIM(token)
+            END IF
+            linelen = LEN_TRIM(output)
+
+            i = i + 1
+         END DO
+         WRITE (iw, '(T2,A,T51,A30)') 'GIRSANOV| Atom list ', TRIM(output)
+         
+      END IF
+
+      CALL cp_print_key_finished_output(iw, logger, section, "PRINT%GIRSANOV_INFO")
+
+   END SUBROUTINE girsanov_info
 
 END MODULE girsanov_types

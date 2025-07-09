@@ -333,10 +333,10 @@ CONTAINS
             END DO
             IF (do_girsanov) THEN
                CALL plumed_gcmd_double("getBias"//CHAR(0), bias_plumed)
-               CALL update_girsanov_environment(girsanov_env, U=bias_plumed)   
-               CALL update_girsanov_environment(girsanov_env, index=1, grad_U=-force_plumed_x(:))
-               CALL update_girsanov_environment(girsanov_env, index=2, grad_U=-force_plumed_y(:))
-               CALL update_girsanov_environment(girsanov_env, index=3, grad_U=-force_plumed_z(:))
+               CALL update_girsanov_environment(girsanov_env, U=-bias_plumed)   
+               CALL update_girsanov_environment(girsanov_env, index=1, grad_U=force_plumed_x(:))
+               CALL update_girsanov_environment(girsanov_env, index=2, grad_U=force_plumed_y(:))
+               CALL update_girsanov_environment(girsanov_env, index=3, grad_U=force_plumed_z(:))
             END IF
 
             DEALLOCATE (pos_plumed_x, pos_plumed_y, pos_plumed_z)
@@ -506,13 +506,13 @@ CONTAINS
                particles%els(i)%f = particles%els(i)%f + fft*colvar_p(icolvar)%colvar%dsdr(:, ii)
                IF(do_girsanov) THEN
                   CALL update_girsanov_environment(girsanov_env, index=i, index_is_particle=.True., &
-                                                   grad_U=-fft*colvar_p(icolvar)%colvar%dsdr(:, ii))
+                                                   grad_U=fft*colvar_p(icolvar)%colvar%dsdr(:, ii))
               END IF
             END DO
          END DO
          IF(do_girsanov) THEN
             CALL update_girsanov_environment(girsanov_env, &
-                                             U=meta_env%hills_env%energy + meta_env%epot_walls)
+                                             U=-meta_env%hills_env%energy - meta_env%epot_walls)
          END IF
       ELSE
          IF(do_girsanov) THEN
