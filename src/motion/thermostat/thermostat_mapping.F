@@ -661,7 +661,9 @@ CONTAINS
          do_girsanov = .TRUE.
          ! ToDo: Implement massive region
          ! CPASSERT((region == do_region_massive) .OR. (region == do_region_defined))
-         CPASSERT(region == do_region_massive)
+         IF (region /= do_region_massive) THEN
+            CPABORT("Girsanov reweighting expects a MASSIVE thermostat.")
+         END IF
       END IF
 
       IF (region == do_region_global) THEN

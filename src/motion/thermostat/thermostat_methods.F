@@ -294,7 +294,17 @@ CONTAINS
                           "particles has been defined. You may want to change your input and add a "// &
                           "THERMOSTAT section in the MD section.")
          END IF
-
+         IF (PRESENT(girsanov_env) .AND. ASSOCIATED(girsanov_env)) THEN
+            IF (.NOT. ASSOCIATED(thermostats%thermostat_part)) THEN
+               CALL cp_abort(__LOCATION__, &
+                             "Girsanov reweighting has been enabled, but no thermostat has been defined for "//&
+                             "the particles")
+            END IF
+            IF (thermostats%thermostat_part%type_of_thermostat /= do_thermo_csvr) THEN
+               CALL cp_abort(__LOCATION__, &
+                             "The selected thermostat is not compatible with Girsanov reweighting.")
+            END IF
+         END IF
          ! Core-Shell Model
          CALL cp_subsys_get(subsys, atomic_kinds=atomic_kinds)
          CALL get_atomic_kind_set(atomic_kind_set=atomic_kinds%els, shell_present=shell_present)
