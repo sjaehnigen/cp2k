@@ -186,7 +186,7 @@ CONTAINS
          ALLOCATE(girsanov_env%index_map(girsanov_env%n_dim, n_particles))
          girsanov_env%index_map = 0
 
-
+         ! use all atoms
          IF ((n_rep == 0) .OR. ANY(atom_list == -1)) THEN
             n_atoms = n_particles
             CALL reallocate(atom_list, 1, n_atoms)
@@ -237,8 +237,6 @@ CONTAINS
          ! - THEROMSTAT (CSVR MASSIVE) or at least one thermo per biased DOF (atomlist)
          ! - if MTD: PLUMED, no extended Lagrangian (if we exlude NON-PLUMED, do we exclude this was well?)
 
-         ! DEALLOCATE(girsanov_section)
-         ! DEALLOCATE(mode_section)
          CALL timestop(handle)
       END IF
 
@@ -248,6 +246,7 @@ CONTAINS
 ! **************************************************************************************************
 !> \brief initializes the Girsanov reweighting environment
 !> \param girsanov_env ...
+!> \param md_section ...
 !> \par History
 !>      07.2025 created [sjaehnigen]
 !> \author Sascha Jähnigen - Freie Universität Berlin
@@ -380,13 +379,10 @@ CONTAINS
 
       CALL timestop(handle)
 
-      ! DO WE NEED MP BROADCAST HERE?
-      ! my_overwrite = .FALSE.
-      ! IF (PRESENT(overwrite)) my_overwrite = overwrite
    END SUBROUTINE update_girsanov_environment_r0
 
 ! **************************************************************************************************
-!> \brief updates the Girsanov environment (rank-1 input for particle)
+!> \brief updates the Girsanov environment (rank-1 input for particle or dimension)
 !> \param girsanov_env ...
 !> \param index ...
 !> \param grad_U ... (add to what is there)
@@ -446,9 +442,6 @@ CONTAINS
 
       CALL timestop(handle)
 
-      ! DO WE NEED MP BROADCAST HERE?
-      ! my_overwrite = .FALSE.
-      ! IF (PRESENT(overwrite)) my_overwrite = overwrite
    END SUBROUTINE update_girsanov_environment_r1
 
 ! **************************************************************************************************
@@ -497,9 +490,6 @@ CONTAINS
 
       CALL timestop(handle)
 
-      ! DO WE NEED MP BROADCAST HERE?
-      ! my_overwrite = .FALSE.
-      ! IF (PRESENT(overwrite)) my_overwrite = overwrite
    END SUBROUTINE update_girsanov_environment_r2
    
 ! **************************************************************************************************
@@ -526,13 +516,14 @@ CONTAINS
 ! **************************************************************************************************
 !> \brief prints info on Girsanov environment
 !> \param girsanov_env ...
+!> \param girsanov_section ...
 !> \par History
 !>      07.2025 created [sjaehnigen]
 !> \author Sascha Jähnigen - Freie Universität Berlin
 ! **************************************************************************************************
-   SUBROUTINE girsanov_info(girsanov_env, section)
+   SUBROUTINE girsanov_info(girsanov_env, girsanov_section)
       TYPE(girsanov_env_type), POINTER                   :: girsanov_env
-      TYPE(section_vals_type), POINTER                   :: section
+      TYPE(section_vals_type), POINTER                   :: girsanov_section
 
       INTEGER                                            :: iw
       TYPE(cp_logger_type), POINTER                      :: logger
@@ -545,12 +536,12 @@ CONTAINS
 
       NULLIFY (logger, grw)
       logger => cp_get_default_logger()
-      iw = cp_print_key_unit_nr(logger, section, "PRINT%GIRSANOV_INFO", extension=".girsanov_log")
+      iw = cp_print_key_unit_nr(logger, girsanov_section,&
+                                "PRINT%GIRSANOV_INFO", extension=".girsanov_log")
       
       grw => girsanov_env
       IF (iw > 0) THEN
          WRITE (iw, '(/,T2,A)') 'GIRSANOV| Dynamical reweighting information'
-         ! Xi, dt, temperature, atomlist(?)
          SELECT CASE (grw%mode)
          CASE(grw_bias_metadynamics)
             mode = "Bias"
@@ -599,7 +590,7 @@ CONTAINS
          
       END IF
 
-      CALL cp_print_key_finished_output(iw, logger, section, "PRINT%GIRSANOV_INFO")
+      CALL cp_print_key_finished_output(iw, logger, girsanov_section, "PRINT%GIRSANOV_INFO")
 
    END SUBROUTINE girsanov_info
 

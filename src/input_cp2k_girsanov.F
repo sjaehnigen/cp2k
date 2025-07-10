@@ -60,12 +60,15 @@ CONTAINS
 
       TYPE(keyword_type), POINTER                        :: keyword
       TYPE(section_type), POINTER                        :: bias_section, perturbation_section, subsection
-      ! subsection, thermo_section
 
       CPASSERT(.NOT. ASSOCIATED(section))
       CALL section_create(section, __LOCATION__, name="GIRSANOV", &
-                          description="Parameters for Girsanov reweighting."//newline//"Hier könnte Ihre Werbung stehen.", &
-                          ! citations=(/Kieninger2023, Schäfer2024/), &
+                          description="Parameters for Girsanov reweighting."//newline//&
+                          "The simulation can be run in BIAS mode or PERTURBATION mode "//&
+                          "(NOT IMPLEMENTED). Please note that this implementation takes "//&
+                          "the viewpoint of a perturbation, thus converts U = -U(bias) etc. "//&
+                          "Only compatible with the CSVR thermostat and MASSIVE region.", &
+                          ! citations=(/Kieninger2023, Schäfer2024, Jähnigen2026/), &
                           n_keywords=1, n_subsections=3, repeats=.FALSE.)
 
       NULLIFY (keyword, bias_section, perturbation_section, subsection)
@@ -128,7 +131,7 @@ CONTAINS
       CALL keyword_create(keyword, __LOCATION__, name="ATOM_LIST", &
                           usage="ATOM_LIST {integer} {integer} ... {integer}", &
                           description="Defines the list of atoms for which the reweighting factor is calculated. "// &
-                                      "(-1 for automatic guess (if possible, NOT IMPLEMENTED); 0 for all atoms)", &
+                                      "(-1 for using all atoms)", &
                           repeats=.TRUE., &
                           n_var=-1, &
                           type_of_var=integer_t, &
@@ -168,7 +171,7 @@ CONTAINS
       CALL keyword_create(keyword, __LOCATION__, name="ATOM_LIST", &
                           usage="ATOM_LIST {integer} {integer} ... {integer}", &
                           description="Defines the list of atoms for which the reweighting factor is calculated. "// &
-                                      "(uses all atoms if no atom list or the value -1 is specified)", &
+                                      "(-1 for using all atoms)", &
                           repeats=.TRUE., &
                           n_var=-1, &
                           type_of_var=integer_t)
