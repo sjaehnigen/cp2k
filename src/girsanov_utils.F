@@ -1,6 +1,6 @@
 !--------------------------------------------------------------------------------------------------!
 !   CP2K: A general program to perform molecular dynamics simulations                              !
-!   Copyright 2000-2024 CP2K developers group <https://cp2k.org>                                   !
+!   Copyright 2000-2025 CP2K developers group <https://cp2k.org>                                   !
 !                                                                                                  !
 !   SPDX-License-Identifier: GPL-2.0-or-later                                                      !
 !--------------------------------------------------------------------------------------------------!
@@ -215,7 +215,7 @@ CONTAINS
          DO  n = 1, n_dim
             i_particle = atom_list(i)
             i_entry = index_map(n, i_particle) 
-            WRITE (output_unit, "(T2,I8,I8,2(1X,F19.10))") &
+            WRITE (output_unit, "(T2,I8,I8,1X,F15.6,1X,ES25.16E2)") &
                i_particle, n, dof(i_entry)%mass/massunit, dof(i_entry)%grad_U(2)
          END DO
       END DO
@@ -262,7 +262,7 @@ CONTAINS
          DO  n = 1, n_dim
             i_particle = atom_list(i)
             i_entry = index_map(n, i_particle)             
-            WRITE (output_unit, "(T2,I8,I8,4(1X,F19.10))") &
+            WRITE (output_unit, "(T2,I8,I8,4(1X,ES25.16E2))") &
                i_particle, n, dof(i_entry)%eta(1:2), dof(i_entry)%delta_eta(1:2)
          END DO
       END DO
@@ -293,9 +293,9 @@ CONTAINS
       LOGICAL, INTENT(IN)                                :: new_file
 
       IF (new_file) THEN
-         WRITE (UNIT=output_unit, FMT='(A,16X,A,16X,A))') "#   Step   Time [fs]", "U/RT", "ΔS/D"
+         WRITE (UNIT=output_unit, FMT='(A,22X,A,22X,A))') "#   Step   Time [fs]", "U/RT", "ΔS/D"
       END IF
-      WRITE (UNIT=output_unit, FMT='(I8,F12.3,2(1X,F19.10))') &
+      WRITE (UNIT=output_unit, FMT='(I8,F12.3,2(1X,ES25.16E2))') &
          itimes, time, girsanov_env%U/girsanov_env%kBT, girsanov_env%delta_S
 
       CALL m_flush(output_unit)
