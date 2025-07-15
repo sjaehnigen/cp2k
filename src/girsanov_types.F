@@ -27,7 +27,8 @@ MODULE girsanov_types
                                               grw_bias_external,&
                                               grw_bias_restraint,&
                                               grw_bias_mixing,&
-                                              grw_perturbation_linres                                              
+                                              grw_perturbation_linres,&
+                                              nvt_ensemble                                            
    USE input_section_types,             ONLY: section_vals_get,&
                                               section_vals_get_subs_vals,&
                                               section_vals_type,&
@@ -124,11 +125,15 @@ CONTAINS
       LOGICAL                                            :: check, explicit, index_in_range
       TYPE(section_vals_type), POINTER                   :: girsanov_section, mode_section
 
-      ! CALL cite_reference(VandeVondele2002)
+      ! CALL cite_reference(our papers)
       NULLIFY (girsanov_section, mode_section, i_atoms, atom_list)
 
       check = .NOT. ASSOCIATED(girsanov_env)
       CPASSERT(check)
+
+      IF (simpar%ensemble /= nvt_ensemble) THEN
+         CPABORT("Girsanov reweighting not implemented for this ensemble (use NVT).")
+      END IF
 
       girsanov_section => section_vals_get_subs_vals(md_section, "GIRSANOV")
       CALL section_vals_get(girsanov_section, explicit=explicit)
@@ -227,15 +232,6 @@ CONTAINS
                girsanov_env%degrees_of_freedom(j)%mass = particles%els(atom_list(i))%atomic_kind%mass
             END DO
          ENDDO
-
-!      INSERT ALL THE CHECKS HERE, such as: (since we have the md_section, why not?)
-!          check = barostat%virial_components == do_clv_xyz .OR. simpar%ensemble == npt_f_ensemble
-!          IF (.NOT. check) &
-!             CALL cp_abort(__LOCATION__, "The screening of the components of "// &
-!                           "the virial is available only with the NPT_F ensemble!")
-         ! - ENSEMBLE (NPT or NVT)
-         ! - THEROMSTAT (CSVR MASSIVE) or at least one thermo per biased DOF (atomlist)
-         ! - if MTD: PLUMED, no extended Lagrangian (if we exlude NON-PLUMED, do we exclude this was well?)
 
          CALL timestop(handle)
       END IF
