@@ -131,15 +131,16 @@ CONTAINS
       check = .NOT. ASSOCIATED(girsanov_env)
       CPASSERT(check)
 
-      IF (simpar%ensemble /= nvt_ensemble) THEN
-         CPABORT("Girsanov reweighting not implemented for this ensemble (use NVT).")
-      END IF
-
       girsanov_section => section_vals_get_subs_vals(md_section, "GIRSANOV")
       CALL section_vals_get(girsanov_section, explicit=explicit)
 
       IF (explicit) THEN
          CALL timeset(routineN, handle)
+
+         IF (simpar%ensemble /= nvt_ensemble) THEN
+            CPABORT("Girsanov reweighting not implemented for this ensemble (use NVT).")
+         END IF
+
          ALLOCATE (girsanov_env)
          girsanov_env%dt = simpar%dt
          girsanov_env%temperature = simpar%temp_ext

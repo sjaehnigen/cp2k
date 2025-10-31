@@ -209,7 +209,8 @@ CONTAINS
       index_map => girsanov_env%index_map
 
       WRITE (output_unit, "(I8)") n_atoms
-      WRITE (output_unit, "(A,I8,A,F12.3,A,F20.10)") &
+      ! WRITE (output_unit, "(A,I8,A,F12.3,A,F20.10)") &
+      WRITE (output_unit, "(A,I8,A,F12.3,A,ES25.16E2)") &
          " i = ", itimes, ", time = ", time, ", U = ", girsanov_env%U
       DO i = 1, n_atoms
          DO  n = 1, n_dim
