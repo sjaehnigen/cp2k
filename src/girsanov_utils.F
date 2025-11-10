@@ -76,6 +76,7 @@ CONTAINS
          ! NB: para_sum for grad_U done by force_env!
 
          DO j=1, SIZE(dof)
+            ! Here division by sqrt(mass) due to fprime
             weight = SQRT(dof(j)%mass)
             dof(j)%delta_eta(1) = girsanov_env%prefactor_eta_1 / weight * dof(j)%grad_U(1)
             dof(j)%delta_eta(2) = girsanov_env%prefactor_eta_2 / weight * dof(j)%grad_U(2)

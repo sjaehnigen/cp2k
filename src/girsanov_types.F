@@ -36,6 +36,7 @@ MODULE girsanov_types
    USE kinds,                           ONLY: dp
    USE memory_utilities,                ONLY: reallocate
    USE particle_list_types,             ONLY: particle_list_type
+   USE particle_types,                  ONLY: particle_type
    USE physcon,                         ONLY: boltzmann, &
                                               femtoseconds, &
                                               joule, &
@@ -53,7 +54,8 @@ MODULE girsanov_types
              initialize_girsanov_environment, &
              roll_girsanov_environment, &
              release_girsanov_environment, &
-             update_girsanov_environment
+             update_girsanov_environment, &
+             save_velocities_sign
 
    INTERFACE update_girsanov_environment
       MODULE PROCEDURE update_girsanov_environment_static, &
@@ -72,6 +74,7 @@ MODULE girsanov_types
       REAL(KIND=dp), DIMENSION(2)                        :: eta = 0.0_dp 
       REAL(KIND=dp), DIMENSION(2)                        :: delta_eta = 0.0_dp 
       REAL(KIND=dp)                                      :: mass
+      REAL(KIND=dp)                                      :: vel_sign = 0.0_dp
    END TYPE 
 
 ! **************************************************************************************************
@@ -310,6 +313,63 @@ CONTAINS
       CALL timestop(handle)
 
    END SUBROUTINE roll_girsanov_environment
+
+! **************************************************************************************************
+!> \brief saves the sign of each DOF's velocity
+!> \param girsanov_env ...
+!> \param particle_set ...
+!> \param vel ...
+!> \par History
+!>      11.2025 created [sjaehnigen]
+!> \author Sascha Jähnigen - Freie Universität Berlin
+! **************************************************************************************************
+   SUBROUTINE save_velocities_sign(girsanov_env, particle_set, vel)   
+      TYPE(girsanov_env_type), INTENT(INOUT)             :: girsanov_env
+      TYPE(particle_type), POINTER                       :: particle_set(:)
+
+      TYPE(degree_of_freedom_type), DIMENSION(:), POINTER &
+                                                         :: dof
+      REAL(KIND=dp), DIMENSION(:, :), INTENT(IN), OPTIONAL &
+                                                         :: vel
+
+      CHARACTER(LEN=*), PARAMETER                        :: routineN = 'save_velocities_sign'
+      INTEGER                                            :: handle
+
+      INTEGER, POINTER, DIMENSION(:, :)                  :: index_map
+      INTEGER                                            :: n_atoms, n_dim, i, j, i_entry, i_particle
+      INTEGER, POINTER, DIMENSION(:)                     :: atom_list
+      LOGICAL                                            :: present_vel
+
+      CALL timeset(routineN, handle)
+
+      CPASSERT(ASSOCIATED(girsanov_env%degrees_of_freedom))
+
+      dof => girsanov_env%degrees_of_freedom
+      n_atoms = girsanov_env%n_atoms
+      index_map => girsanov_env%index_map
+      n_dim = girsanov_env%n_dim
+      atom_list => girsanov_env%atom_list
+
+      present_vel = PRESENT(vel)
+      DO j=1, n_dim
+         DO i=1, n_atoms
+            i_particle = atom_list(i)
+            i_entry = index_map(j, i_particle)             
+            IF(present_vel) THEN
+               dof(i_entry)%vel_sign = SIGN(1.0_dp, vel(j, i_particle))  ! here vel sign for each DOF
+            ELSE 
+               dof(i_entry)%vel_sign = SIGN(1.0_dp, particle_set(i_particle)%v(j))  ! here vel sign for each DOF
+            END IF
+         END DO
+      END DO 
+
+      NULLIFY(dof)
+      NULLIFY(index_map)
+      NULLIFY(atom_list)
+
+      CALL timestop(handle)
+
+   END SUBROUTINE save_velocities_sign
 
 ! **************************************************************************************************
 !> \brief updates the Girsanov environment (static input)

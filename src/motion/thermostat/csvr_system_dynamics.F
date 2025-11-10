@@ -16,7 +16,8 @@ MODULE csvr_system_dynamics
    USE distribution_1d_types,           ONLY: distribution_1d_type
    USE extended_system_types,           ONLY: map_info_type,&
                                               npt_info_type
-   USE girsanov_types,                  ONLY: girsanov_env_type
+   USE girsanov_types,                  ONLY: girsanov_env_type,&
+                                              save_velocities_sign
    USE kinds,                           ONLY: dp
    USE message_passing,                 ONLY: mp_comm_type
    USE molecule_kind_types,             ONLY: molecule_kind_type
@@ -128,6 +129,10 @@ CONTAINS
       my_shell_adiabatic = .FALSE.
       IF (PRESENT(shell_adiabatic)) my_shell_adiabatic = shell_adiabatic
       map_info => csvr%map_info
+
+      IF (PRESENT(girsanov_env) .AND. ASSOCIATED(girsanov_env)) THEN
+         CALL save_velocities_sign(girsanov_env, particle_set, vel)
+      END IF
 
       ! Compute the kinetic energy for the region to thermostat
       CALL ke_region_particles(map_info, particle_set, molecule_kind_set, &
@@ -253,6 +258,8 @@ CONTAINS
          IF (jmap /= 0) THEN
             map_info%v_scale(imap) = rescaling_factor(kin_energy, kin_target, ndeg, taut, &
                                                       rng_stream, rn1=random_numbers(jmap))
+            random_numbers(jmap) = random_numbers(jmap)*girsanov_env%degrees_of_freedom(jmap)%vel_sign
+            girsanov_env%degrees_of_freedom(jmap)%vel_sign = 0.0_dp
          ELSE
             map_info%v_scale(imap) = rescaling_factor(kin_energy, kin_target, ndeg, taut, &
                                                       rng_stream)
