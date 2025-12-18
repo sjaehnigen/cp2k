@@ -32,7 +32,8 @@ MODULE girsanov_types
    USE input_section_types,             ONLY: section_vals_get,&
                                               section_vals_get_subs_vals,&
                                               section_vals_type,&
-                                              section_vals_val_get
+                                              section_vals_val_get,&
+                                              section_vals_val_set
    USE kinds,                           ONLY: dp
    USE memory_utilities,                ONLY: reallocate
    USE particle_list_types,             ONLY: particle_list_type
@@ -55,7 +56,8 @@ MODULE girsanov_types
              roll_girsanov_environment, &
              release_girsanov_environment, &
              update_girsanov_environment, &
-             save_velocities_sign
+             save_velocities_sign,&
+             update_girsanov_section
 
    INTERFACE update_girsanov_environment
       MODULE PROCEDURE update_girsanov_environment_static, &
@@ -120,6 +122,7 @@ CONTAINS
       INTEGER                                            :: grw_mode, grw_source, &
                                                             n_rep, n_atoms, n_particles, &
                                                             k, i, j, n
+      REAL(KIND=dp)                                      :: log_m
       INTEGER, DIMENSION(:), POINTER                     :: i_atoms, atom_list
       
       CHARACTER(LEN=*), PARAMETER                        :: routineN = 'create_girsanov_environment'
@@ -236,6 +239,10 @@ CONTAINS
                girsanov_env%degrees_of_freedom(j)%mass = particles%els(atom_list(i))%atomic_kind%mass
             END DO
          ENDDO
+
+         ! set buffer restart value
+         CALL section_vals_val_get(girsanov_section, "LOG_M", r_val=log_m)
+         girsanov_env%delta_S = log_m
 
          CALL timestop(handle)
       END IF
@@ -650,5 +657,18 @@ CONTAINS
       CALL cp_print_key_finished_output(iw, logger, girsanov_section, "PRINT%GIRSANOV_INFO")
 
    END SUBROUTINE girsanov_info
+
+! **************************************************************************************************
+!> \brief Update Girsanov section for buffer restart
+!> \param section ...
+!> \author Sascha Jähnigen - Freie Universität Berlin - 12.2025
+! **************************************************************************************************
+   SUBROUTINE update_girsanov_section(girsanov_section, girsanov_env)
+      TYPE(girsanov_env_type), POINTER                   :: girsanov_env
+      TYPE(section_vals_type), POINTER                   :: girsanov_section
+
+      CALL section_vals_val_set(girsanov_section, "LOG_M", r_val=girsanov_env%delta_S)
+
+   END SUBROUTINE update_girsanov_section
 
 END MODULE girsanov_types

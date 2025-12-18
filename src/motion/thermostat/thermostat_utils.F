@@ -26,7 +26,6 @@ MODULE thermostat_utils
    USE extended_system_types,           ONLY: lnhc_parameters_type,&
                                               map_info_type,&
                                               npt_info_type
-   USE girsanov_types,                  ONLY: girsanov_env_type
    USE input_constants,                 ONLY: &
         do_constr_atomic, do_constr_molec, do_region_defined, do_region_global, do_region_massive, &
         do_region_molecule, do_thermo_al, do_thermo_communication, do_thermo_csvr, do_thermo_gle, &

@@ -36,6 +36,8 @@ MODULE input_cp2k_restarts
    USE force_env_types,                 ONLY: force_env_get,&
                                               force_env_type,&
                                               multiple_fe_list
+   USE girsanov_types,                  ONLY: girsanov_env_type,&
+                                              update_girsanov_section
    USE gle_system_types,                ONLY: gle_type
    USE helium_types,                    ONLY: helium_solvent_p_type
    USE input_constants,                 ONLY: &
@@ -520,7 +522,8 @@ CONTAINS
       REAL(KIND=dp), POINTER                             :: constant, t
       TYPE(average_quantities_type), POINTER             :: averages
       TYPE(cp_subsys_type), POINTER                      :: subsys
-      TYPE(lnhc_parameters_type), POINTER                :: nhc
+      TYPE(girsanov_env_type), POINTER                   :: girsanov_env      
+      TYPE(lnhc_parameters_type), POINTER                :: nhc      
       TYPE(meta_env_type), POINTER                       :: meta_env
       TYPE(mp_para_env_type), POINTER                    :: para_env
       TYPE(npt_info_type), POINTER                       :: npt(:, :)
@@ -532,7 +535,7 @@ CONTAINS
 
       CALL timeset(routineN, handle)
       NULLIFY (logger, thermostat_part, thermostat_baro, npt, para_env, nhc, &
-               work_section, thermostat_shell, t, averages, constant, &
+               work_section, thermostat_shell, girsanov_env, t, averages, constant, &
                walkers_status, itimes, meta_env, simpar)
       NULLIFY (particles)
       NULLIFY (subsys)
@@ -541,6 +544,7 @@ CONTAINS
                          thermostat_part=thermostat_part, &
                          thermostat_baro=thermostat_baro, &
                          thermostat_shell=thermostat_shell, &
+                         girsanov_env=girsanov_env, &
                          npt=npt, &
                          t=t, &
                          constant=constant, &
@@ -691,6 +695,15 @@ CONTAINS
             work_section => section_vals_get_subs_vals(motion_section, "MD%THERMOSTAT%GLE")
             CALL dump_gle_restart_info(thermostat_part%gle, para_env, work_section)
          END IF
+      END IF
+      CALL timestop(handle2)
+
+
+      ! GIRSANOV
+      CALL timeset(routineN//"_GIRSANOV", handle2)
+      IF (ASSOCIATED(girsanov_env)) THEN
+         work_section => section_vals_get_subs_vals(motion_section, "MD%GIRSANOV")
+         CALL update_girsanov_section(work_section, girsanov_env)
       END IF
       CALL timestop(handle2)
 
