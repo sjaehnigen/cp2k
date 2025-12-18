@@ -36,6 +36,7 @@ MODULE input_cp2k_girsanov
                                               section_release,&
                                               section_type
    USE input_val_types,                 ONLY: integer_t
+   USE kinds,                           ONLY: dp
    USE string_utilities,                ONLY: newline, s2a
 #include "./base/base_uses.f90"
 
@@ -46,7 +47,6 @@ MODULE input_cp2k_girsanov
    CHARACTER(len=*), PARAMETER, PRIVATE :: moduleN = 'input_cp2k_girsanov'
 
    PUBLIC :: create_girsanov_section
-
 !***
 CONTAINS
 
@@ -78,9 +78,24 @@ CONTAINS
                           enum_c_vals=s2a("BIAS", "PERTURBATION"), &
                           enum_i_vals=(/grw_bias, grw_perturbation/), &
                           enum_desc=s2a("bias", "perturbation"), &
-                          default_i_val=grw_bias)
+                          default_i_val=grw_bias)                      
       CALL section_add_keyword(section, keyword)
       CALL keyword_release(keyword)
+
+      ! buffer RESTART
+      CALL keyword_create(keyword, __LOCATION__, name="LOG_M", &
+                          description="Initial value of the dynamical reweighting factor", &
+                          usage="LOG_M {real}", &
+                          default_r_val=0.0_dp)    
+      CALL section_add_keyword(section, keyword)
+      CALL keyword_release(keyword)
+
+      ! CALL keyword_create(keyword, __LOCATION__, name="U", &
+      !                     description="Initial value of the bias potential potential", &
+      !                     usage="U {real}", &
+      !                     default_r_val=0.0_dp)    
+      ! CALL section_add_keyword(section, keyword)
+      ! CALL keyword_release(keyword)
 
       CALL create_bias_section(bias_section)
       CALL section_add_subsection(section, bias_section)

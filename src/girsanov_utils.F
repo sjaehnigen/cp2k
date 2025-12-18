@@ -209,8 +209,7 @@ CONTAINS
       atom_list => girsanov_env%atom_list
       index_map => girsanov_env%index_map
 
-      WRITE (output_unit, "(I8)") n_atoms
-      ! WRITE (output_unit, "(A,I8,A,F12.3,A,F20.10)") &
+      WRITE (output_unit, "(I8)") n_dim*n_atoms
       WRITE (output_unit, "(A,I8,A,F12.3,A,ES25.16E2)") &
          " i = ", itimes, ", time = ", time, ", U = ", girsanov_env%U
       DO i = 1, n_atoms
@@ -257,8 +256,8 @@ CONTAINS
       atom_list => girsanov_env%atom_list
       index_map => girsanov_env%index_map
 
-      WRITE (output_unit, "(I8)") n_atoms
-      WRITE (output_unit, "(A,I8,A,F12.3,A,F20.10)") &
+      WRITE (output_unit, "(I8)") n_dim*n_atoms
+      WRITE (output_unit, "(A,I8,A,F12.3,A,ES25.16E2)") &
          " i = ", itimes, ", time = ", time, ", U = ", girsanov_env%U
       DO i = 1, n_atoms
          DO  n = 1, n_dim
@@ -295,7 +294,7 @@ CONTAINS
       LOGICAL, INTENT(IN)                                :: new_file
 
       IF (new_file) THEN
-         WRITE (UNIT=output_unit, FMT='(A,22X,A,22X,A))') "#   Step   Time [fs]", "U/RT", "ΔS/D"
+         WRITE (UNIT=output_unit, FMT='(A,22X,A,22X,A))') "#   Step   Time [fs]", "log(g)", "log(M)"
       END IF
       WRITE (UNIT=output_unit, FMT='(I8,F12.3,2(1X,ES25.16E2))') &
          itimes, time, girsanov_env%U/girsanov_env%kBT, girsanov_env%delta_S
