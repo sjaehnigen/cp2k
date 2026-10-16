@@ -12,10 +12,7 @@
 !> \author Sascha Jähnigen - Freie Universität Berlin
 ! **************************************************************************************************
 MODULE input_cp2k_girsanov
-!      USE bibliography,                    ONLY: &
-!         Aguado2003, BaniHashemian2016, Blochl1995, Darden1993, Essmann1995, Ewald1921, &
-!         Genovese2006, Genovese2007, Laino2008, Martyna1999, Toukmaji1996
-
+   USE bibliography,                    ONLY: Schäfer2024, Jähnigen2026
    USE input_constants,                 ONLY: grw_bias,&
                                               grw_perturbation,&
                                               grw_bias_metadynamics,&
@@ -68,7 +65,7 @@ CONTAINS
                           "(NOT IMPLEMENTED). Please note that this implementation takes "//&
                           "the viewpoint of a perturbation, thus converts U = -U(bias) etc. "//&
                           "Only compatible with the CSVR thermostat and MASSIVE region.", &
-                          ! citations=(/Kieninger2023, Schäfer2024, Jähnigen2026/), &
+                          citations=(/Schäfer2024, Jähnigen2026/), &
                           n_keywords=1, n_subsections=3, repeats=.FALSE.)
 
       NULLIFY (keyword, bias_section, perturbation_section, subsection)

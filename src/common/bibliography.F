@@ -102,7 +102,8 @@ MODULE bibliography
                             Cances2000, Herbst2022, Zhang2025, Gresch2017, Soluyanov2011, Dixon2023, Doll2025, &
                             Wong2026, Loring2015, EsteveParedes2023, Cerjan2023, Bairnsfather2026, Davidson1975, &
                             Olsen1988, Stratmann1998, Vecharynski2017, Stathopoulos1998, Bai2012, &
-                            Fukaya2014, Schreder2024_3, Pizzi2020, Marzari1997, Souza2001
+                            Fukaya2014, Schreder2024_3, Pizzi2020, Marzari1997, Souza2001, &
+                            Schäfer2024, Jähnigen2026
 
 CONTAINS
 
@@ -414,7 +415,7 @@ CONTAINS
 
       CALL add_reference(key=VandeVondele2005a, &
                          authors=s2a("J. VandeVondele", "M. Krack", "F. Mohamed", "M. Parrinello", &
-                                     "T. Chassaing", "J. Hutter"), &
+                                     G"T. Chassaing", "J. Hutter"), &
                          title="QUICKSTEP: Fast and accurate density functional calculations "// &
                          "using a mixed Gaussian and plane waves approach", &
                          source="Comput. Phys. Commun.", volume="167", pages="103-128", &
@@ -2474,6 +2475,18 @@ CONTAINS
                          "wave DFT environment", &
                          source="J. Chem. Phys.", volume="161", pages="144110", &
                          year=2024, doi="10.1063/5.0222409")
+
+      CALL add_reference(key=Schäfer2024, &
+                         authors=s2a("J.-L. Schäfer", "B. G. Keller"), &
+                         title="Implementation of Girsanov Reweighting in OpenMM and Deeptime", &
+                         source="J. Phys. Chem. B", volume="128", pages="6014-6027", &
+                         year=2024, doi="10.1021/acs.jpcb.4c01702")
+
+      CALL add_reference(key=Jähnigen2026, &
+                         authors=s2a("S. Jähnigen", "B. G. Keller"), &
+                         title="Implementation of Girsanov Reweighting in CP2K", &
+                         source="Commun. Appl. Math. Comput. Sci.", volume="21", pages="XXX-YYY", &
+                         year=2026, doi="10.2140/camcos.2026.21.XXX")
 
    END SUBROUTINE add_all_references
 
